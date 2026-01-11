@@ -1,0 +1,34 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    
+    <!-- 低调奢华风 - 暗色主题 -->
+    <Color x:Key="Dark.Background">#0A0A0C</Color>
+    <Color x:Key="Dark.Surface">#141418</Color>
+    <Color x:Key="Dark.SurfaceVariant">#1C1C22</Color>
+    <Color x:Key="Dark.Border">#2A2A32</Color>
+    <Color x:Key="Dark.BorderSubtle">#1E1E24</Color>
+    <Color x:Key="Dark.Text">#E8E8EC</Color>
+    <Color x:Key="Dark.TextSecondary">#9898A0</Color>
+    <Color x:Key="Dark.TextMuted">#5C5C64</Color>
+    <Color x:Key="Dark.Accent">#B8A080</Color>
+    <Color x:Key="Dark.AccentHover">#D4BC98</Color>
+    <Color x:Key="Dark.Success">#6AAF7C</Color>
+    <Color x:Key="Dark.Warning">#D4A84C</Color>
+    <Color x:Key="Dark.Error">#C45C5C</Color>
+    
+    <!-- 低调奢华风 - 亮色主题 -->
+    <Color x:Key="Light.Background">#F8F7F5</Color>
+    <Color x:Key="Light.Surface">#FFFFFF</Color>
+    <Color x:Key="Light.SurfaceVariant">#F0EEE8</Color>
+    <Color x:Key="Light.Border">#D8D4CC</Color>
+    <Color x:Key="Light.BorderSubtle">#E8E4DC</Color>
+    <Color x:Key="Light.Text">#1A1A1C</Color>
+    <Color x:Key="Light.TextSecondary">#5C5C64</Color>
+    <Color x:Key="Light.TextMuted">#9898A0</Color>
+    <Color x:Key="Light.Accent">#8C7860</Color>
+    <Color x:Key="Light.AccentHover">#6C5C48</Color>
+    <Color x:Key="Light.Success">#4A8F5C</Color>
+    <Color x:Key="Light.Warning">#B48830</Color>
+    <Color x:Key="Light.Error">#A44040</Color>
+    
+</ResourceDictionary>
