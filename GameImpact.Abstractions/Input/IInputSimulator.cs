@@ -39,7 +39,7 @@ public interface IMouseInput
     bool ForegroundClickAt(int x, int y);
 
     /// <summary>移动鼠标光标到屏幕绝对坐标。</summary>
-    IMouseInput MoveTo(int x, int y);
+    bool MoveTo(int x, int y);
 
     /// <summary>在当前光标位置执行左键单击（SendInput）。</summary>
     IMouseInput LeftClick();

@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using GameImpact.Abstractions.Input;
 using GameImpact.Input.Native;
 using GameImpact.Utilities.Logging;
@@ -10,8 +11,12 @@ public partial class SendInputSimulator : IMouseInput
     {
         var lParam = NativeMethods.MakeLParam(x, y);
         var downResult = NativeMethods.PostMessage(_hWnd, NativeMethods.WindowMessage_LeftButtonDown, NativeMethods.MouseKey_LeftButton, lParam);
+        if (!downResult)
+            LogWin32Error("[Mouse] PostMessage WM_LBUTTONDOWN failed at ({X}, {Y})", x, y);
         Thread.Sleep(50);
         var upResult = NativeMethods.PostMessage(_hWnd, NativeMethods.WindowMessage_LeftButtonUp, 0, lParam);
+        if (!upResult)
+            LogWin32Error("[Mouse] PostMessage WM_LBUTTONUP failed at ({X}, {Y})", x, y);
 
         Log.Debug("[Mouse] BackgroundClickAt (PostMessage): ({X}, {Y}, {Result})", x, y, downResult && upResult);
         return downResult && upResult;
@@ -20,8 +25,10 @@ public partial class SendInputSimulator : IMouseInput
     public bool ForegroundClickAt(int x, int y)
     {
         var pt = new NativeMethods.Point(x, y);
-        NativeMethods.ClientToScreen(_hWnd, ref pt);
-        NativeMethods.SetCursorPos(pt.X, pt.Y);
+        if (!NativeMethods.ClientToScreen(_hWnd, ref pt))
+            LogWin32Error("[Mouse] ClientToScreen failed for hWnd=0x{Hwnd:X}", _hWnd);
+        if (!NativeMethods.SetCursorPos(pt.X, pt.Y))
+            LogWin32Error("[Mouse] SetCursorPos({X}, {Y}) failed", pt.X, pt.Y);
         Thread.Sleep(30);
         var downResult = SendMouseEvent(NativeMethods.MouseEventFlags_LeftDown);
         Thread.Sleep(50);
@@ -31,11 +38,13 @@ public partial class SendInputSimulator : IMouseInput
         return downResult > 0 && upResult > 0;
     }
 
-    public IMouseInput MoveTo(int x, int y)
+    public bool MoveTo(int x, int y)
     {
         Log.Debug("[Mouse] MoveTo: ({X}, {Y})", x, y);
-        NativeMethods.SetCursorPos(x, y);
-        return this;
+        var result = NativeMethods.SetCursorPos(x, y);
+        if (!result)
+            LogWin32Error("[Mouse] SetCursorPos({X}, {Y}) failed", x, y);
+        return result;
     }
 
     public IMouseInput LeftClick()
@@ -65,7 +74,9 @@ public partial class SendInputSimulator : IMouseInput
                         Flags = NativeMethods.MouseEventFlags_Wheel
                 }
         });
-        _ = NativeMethods.SendInput(1, [input], NativeMethods.Input.Size);
+        var result = NativeMethods.SendInput(1, [input], NativeMethods.Input.Size);
+        if (result == 0)
+            LogWin32Error("[Mouse] SendInput Scroll failed");
         return this;
     }
 

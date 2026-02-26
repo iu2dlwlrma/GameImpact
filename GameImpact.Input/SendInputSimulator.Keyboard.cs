@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using GameImpact.Abstractions.Input;
 using GameImpact.Input.Native;
 using GameImpact.Utilities.Logging;
@@ -9,26 +10,23 @@ public partial class SendInputSimulator : IKeyboardInput
     public IKeyboardInput KeyDown(VirtualKey key)
     {
         Log.Debug("[Keyboard] KeyDown: {Key}", key);
-        var scan = (byte)(NativeMethods.MapVirtualKey((uint)key, 0) & 0xFF);
-        SendKeyboardEvent((byte)key, scan, 0, UIntPtr.Zero);
+        SendKeyAction(key, false);
         return this;
     }
 
     public IKeyboardInput KeyUp(VirtualKey key)
     {
         Log.Debug("[Keyboard] KeyUp: {Key}", key);
-        var scan = (byte)(NativeMethods.MapVirtualKey((uint)key, 0) & 0xFF);
-        SendKeyboardEvent((byte)key, scan, NativeMethods.KeyEventFlags_KeyUp, UIntPtr.Zero);
+        SendKeyAction(key, true);
         return this;
     }
 
     public IKeyboardInput KeyPress(VirtualKey key)
     {
         Log.Debug("[Keyboard] KeyPress: {Key}", key);
-        var scan = (byte)(NativeMethods.MapVirtualKey((uint)key, 0) & 0xFF);
-        SendKeyboardEvent((byte)key, scan, 0, UIntPtr.Zero);
+        SendKeyAction(key, false);
         Thread.Sleep(50);
-        SendKeyboardEvent((byte)key, scan, NativeMethods.KeyEventFlags_KeyUp, UIntPtr.Zero);
+        SendKeyAction(key, true);
         return this;
     }
 
@@ -66,7 +64,9 @@ public partial class SendInputSimulator : IKeyboardInput
                             Flags = NativeMethods.KeyEventFlags_Unicode | NativeMethods.KeyEventFlags_KeyUp
                     }
             });
-            _ = NativeMethods.SendInput(2, inputs, NativeMethods.Input.Size);
+            var sent = NativeMethods.SendInput(2, inputs, NativeMethods.Input.Size);
+            if (sent == 0)
+                LogWin32Error("[Keyboard] SendInput TextEntry failed for char '{Char}'", c);
         }
         return this;
     }
@@ -77,11 +77,59 @@ public partial class SendInputSimulator : IKeyboardInput
         return this;
     }
 
-    private static uint SendKeyboardEvent(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo)
+    private uint SendKeyAction(VirtualKey key, bool isKeyUp)
     {
+        var scan = (ushort)(NativeMethods.MapVirtualKey((uint)key, 0) & 0xFF);
+
+        return KeyboardMode switch
+        {
+            KeyboardInputMode.SendInputScanCode => SendInputScanCode(scan, isKeyUp),
+            KeyboardInputMode.PostMessage => PostMessageKey(key, scan, isKeyUp) ? 1u : 0u,
+            _ => SendInputVk(key, scan, isKeyUp),
+        };
+    }
+
+    private static uint SendInputVk(VirtualKey key, ushort scan, bool isKeyUp)
+    {
+        uint flags = isKeyUp ? NativeMethods.KeyEventFlags_KeyUp : 0;
         var input = new NativeMethods.Input(NativeMethods.InputKeyboard, new NativeMethods.InputUnion {
-                Keyboard = new NativeMethods.KeyboardInput { Vk = bVk, Scan = bScan, Flags = dwFlags, ExtraInfo = dwExtraInfo }
+                Keyboard = new NativeMethods.KeyboardInput { Vk = (ushort)key, Scan = scan, Flags = flags }
         });
         return SendInputEvent(input);
+    }
+
+    private static uint SendInputScanCode(ushort scan, bool isKeyUp)
+    {
+        uint flags = NativeMethods.KeyEventFlags_Scancode;
+        if (isKeyUp) flags |= NativeMethods.KeyEventFlags_KeyUp;
+        var input = new NativeMethods.Input(NativeMethods.InputKeyboard, new NativeMethods.InputUnion {
+                Keyboard = new NativeMethods.KeyboardInput { Vk = 0, Scan = scan, Flags = flags }
+        });
+        return SendInputEvent(input);
+    }
+
+    /// <summary>
+    /// 通过 PostMessage 投递 WM_KEYDOWN / WM_KEYUP 到目标窗口。
+    /// lParam 格式 (32 bit):
+    ///   bits  0-15 : repeat count (1)
+    ///   bits 16-23 : scan code
+    ///   bit  24    : extended key flag (0)
+    ///   bits 25-28 : reserved (0)
+    ///   bit  29    : context code (0)
+    ///   bit  30    : previous key state (0=down, 1=up)
+    ///   bit  31    : transition state (0=down, 1=up)
+    /// </summary>
+    private bool PostMessageKey(VirtualKey key, ushort scan, bool isKeyUp)
+    {
+        var msg = isKeyUp ? NativeMethods.WindowMessage_KeyUp : NativeMethods.WindowMessage_KeyDown;
+
+        nint lParam = 1 | ((nint)scan << 16);
+        if (isKeyUp)
+            lParam |= (nint)0xC0000000; // bits 30 + 31
+        
+        var result = NativeMethods.PostMessage(_hWnd, msg, (nint)key, lParam);
+        if (!result)
+            LogWin32Error("[Keyboard] PostMessage WM_KEY{Action} failed for {Key}", isKeyUp ? "UP" : "DOWN", key);
+        return result;
     }
 }

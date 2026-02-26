@@ -1,7 +1,6 @@
 using System;
 using System.Text;
 using System.Windows;
-using System.Windows.Controls;
 using GameImpact.Core;
 using GameImpact.UI.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,9 +43,34 @@ public abstract class GameImpactApp : Application
     /// </summary>
     protected virtual FrameworkElement? CreateContentView(IServiceProvider services) => null;
 
+    /// <summary>
+    /// 是否在启动时请求管理员权限
+    /// </summary>
+    protected virtual bool RequestAdminAtStartup => true;
+
+    /// <summary>
+    /// 请求管理员权限时的弹窗正文。子类可覆写以自定义说明。
+    /// </summary>
+    protected virtual string AdminRequestMessage => "本程序需要管理员权限以支持部分功能（如与游戏窗口通信）。\n\n是否现在提权并重启？";
+
+    /// <summary>
+    /// 请求管理员权限时的弹窗标题。
+    /// </summary>
+    protected virtual string AdminRequestTitle => "需要管理员权限";
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        if (RequestAdminAtStartup && !RunAsAdmin.IsRunningAsAdministrator())
+        {
+            var result = MessageBox.Show(AdminRequestMessage, AdminRequestTitle, MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes && RunAsAdmin.RestartElevated(e.Args))
+            {
+                Shutdown();
+                return;
+            }
+        }
 
         // 初始化 Serilog
         Log.Logger = new LoggerConfiguration()
