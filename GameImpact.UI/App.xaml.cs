@@ -46,7 +46,7 @@ public abstract class GameImpactApp : Application
     /// <summary>
     /// 是否在启动时请求管理员权限
     /// </summary>
-    protected virtual bool RequestAdminAtStartup => true;
+    protected virtual bool RequestAdminAtStartup => false;
 
     /// <summary>
     /// 请求管理员权限时的弹窗正文。子类可覆写以自定义说明。

@@ -15,12 +15,50 @@ public partial class DebugWindow : Window
     private bool _isCapturingKey;
     private Key _capturedKey = Key.None;
     private ModifierKeys _capturedModifiers = ModifierKeys.None;
+    private readonly List<string> _templateFiles = new();
 
     public DebugWindow(MainModel model)
     {
         InitializeComponent();
         this.model = model;
         DataContext = model;
+        Loaded += (_, _) => RefreshTemplateList();
+    }
+
+    private void RefreshTemplateList()
+    {
+        _templateFiles.Clear();
+        _templateFiles.AddRange(model.GetTemplateFileNames());
+        TemplateListCombo.ItemsSource = null;
+        TemplateListCombo.ItemsSource = _templateFiles;
+        if (_templateFiles.Count > 0 && TemplateListCombo.SelectedIndex < 0)
+            TemplateListCombo.SelectedIndex = 0;
+    }
+
+    private void ScreenshotTool_Click(object sender, RoutedEventArgs e)
+    {
+        model.StartScreenshotTool(RefreshTemplateList);
+        AppendInputLog("请在目标窗口上拖拽框选区域，或按 ESC 取消");
+    }
+
+    private void MatchTemplate_Click(object sender, RoutedEventArgs e)
+    {
+        var selected = TemplateListCombo.SelectedItem as string;
+        if (string.IsNullOrEmpty(selected))
+        {
+            AppendInputLog("错误: 请先选择模板");
+            return;
+        }
+
+        var (found, x, y, conf) = model.MatchWithTemplate(selected);
+        if (found)
+        {
+            AppendInputLog($"模板匹配: '{selected}' 中心=({x},{y}) 置信度={conf:P0}");
+            MouseX.Text = x.ToString();
+            MouseY.Text = y.ToString();
+        }
+        else
+            AppendInputLog($"未匹配到模板: '{selected}'");
     }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

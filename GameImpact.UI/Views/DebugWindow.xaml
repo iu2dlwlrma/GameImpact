@@ -166,6 +166,7 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
 
@@ -249,8 +250,43 @@
                                 </Grid>
                             </Border>
 
-                            <!-- 键盘测试 -->
+                            <!-- 截图 / 模板 -->
                             <Border Grid.Row="2"
+                                Background="{DynamicResource AppSurfaceVariant}"
+                                CornerRadius="6" Padding="12" Margin="0,0,0,10">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Grid.Row="0" Orientation="Horizontal">
+                                        <TextBlock Text="截图/模板" FontWeight="SemiBold"
+                                            FontSize="12" Foreground="{DynamicResource AppText}"
+                                            VerticalAlignment="Center"/>
+                                        <Button Content="📷 截图"
+                                            Style="{DynamicResource AccentButton}"
+                                            Padding="12,4" FontSize="11" Margin="12,0,0,0"
+                                            Click="ScreenshotTool_Click"
+                                            ToolTip="在目标窗口上框选区域，保存到模板文件夹（与 logs 同级）"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,0">
+                                        <TextBlock Text="模板:"
+                                            Foreground="{DynamicResource AppTextMuted}"
+                                            VerticalAlignment="Center" FontSize="11"/>
+                                        <ComboBox x:Name="TemplateListCombo" MinWidth="200" Margin="6,0,8,0"
+                                            FontSize="11" VerticalAlignment="Center"
+                                            ToolTip="选择要匹配的模板图片"/>
+                                        <Button Content="识别"
+                                            Style="{DynamicResource SubtleButton}"
+                                            Padding="12,4" FontSize="11"
+                                            Click="MatchTemplate_Click"
+                                            ToolTip="用当前画面与所选模板匹配"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <!-- 键盘测试 -->
+                            <Border Grid.Row="3"
                                 Background="{DynamicResource AppSurfaceVariant}"
                                 CornerRadius="6" Padding="12" Margin="0,0,0,10">
                                 <StackPanel Orientation="Horizontal">
@@ -280,7 +316,7 @@
                             </Border>
 
                             <!-- 测试日志 -->
-                            <Border Grid.Row="3"
+                            <Border Grid.Row="4"
                                 Background="{DynamicResource AppBackground}"
                                 CornerRadius="6" Padding="10">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">

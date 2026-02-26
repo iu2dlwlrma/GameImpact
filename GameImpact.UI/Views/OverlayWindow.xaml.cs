@@ -24,6 +24,9 @@ public partial class OverlayWindow : System.Windows.Window
     private readonly DispatcherTimer _positionTimer;
     private bool _isPickingCoord;
     private Action<int, int>? _onCoordPicked;
+    private bool _isScreenshotRegion;
+    private Action<int, int, int, int>? _onScreenshotRegionComplete;
+    private System.Windows.Point _screenshotStart;
     private double _dpiScale = 1.0;
 
     private const int WS_EX_TRANSPARENT = 0x00000020;
@@ -110,6 +113,7 @@ public partial class OverlayWindow : System.Windows.Window
     public void Detach()
     {
         if (_isPickingCoord) StopPickCoord();
+        if (_isScreenshotRegion) StopScreenshotRegion();
         _positionTimer.Stop();
         _targetHwnd = 0;
         Hide();
@@ -126,7 +130,219 @@ public partial class OverlayWindow : System.Windows.Window
         _instance = null;
     }
 
-    // ── 叠加日志实现 ──────────────────────────────────────────
+    /// <summary>进入拾取/截图等需要接收鼠标的模式时，去掉透明与不激活，使覆盖层可点击。</summary>
+    private void SetOverlayReceivesInput(bool receive)
+    {
+        if (_overlayHwnd == nint.Zero) return;
+
+        var exStyle = GetWindowLong(_overlayHwnd, GWL_EXSTYLE);
+        if (receive)
+        {
+            // 移除透明和不激活标志
+            _ = SetWindowLong(_overlayHwnd, GWL_EXSTYLE, exStyle & ~WS_EX_TRANSPARENT & ~WS_EX_NOACTIVATE);
+        }
+        else
+        {
+            // 恢复透明和不激活标志
+            _ = SetWindowLong(_overlayHwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE);
+        }
+    }
+
+    /// <summary>将覆盖层窗口置于前台并激活，确保能收到鼠标键盘。</summary>
+    private void BringOverlayToFront()
+    {
+        if (_overlayHwnd == nint.Zero) return;
+        SetForegroundWindow(_overlayHwnd);
+    }
+
+    private void BringTargetWindowToFront()
+    {
+        if (_targetHwnd == 0) return;
+
+        if (IsIconic(_targetHwnd))
+            ShowWindow(_targetHwnd, 9);
+
+        SetForegroundWindow(_targetHwnd);
+    }
+
+    private void HideAppWindow()
+    {
+        try
+        {
+            // 隐藏除当前 OverlayWindow 之外的所有窗口
+            foreach (System.Windows.Window window in Application.Current.Windows)
+            {
+                if (window != this && window != null)
+                {
+                    var hwnd = new WindowInteropHelper(window).Handle;
+                    if (hwnd != nint.Zero)
+                    {
+                        ShowWindow(hwnd, SW_HIDE);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            /* ignore */
+        }
+    }
+
+    private void ShowAppWindow()
+    {
+        try
+        {
+            // 显示除当前 OverlayWindow 之外的所有窗口
+            foreach (System.Windows.Window window in Application.Current.Windows)
+            {
+                if (window != this && window != null)
+                {
+                    var hwnd = new WindowInteropHelper(window).Handle;
+                    if (hwnd != nint.Zero)
+                    {
+                        ShowWindow(hwnd, SW_SHOW);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            /* ignore */
+        }
+    }
+
+    private void UpdatePosition(object? sender, EventArgs e)
+    {
+        if (_targetHwnd == 0) return;
+
+        if (!IsWindow(_targetHwnd))
+        {
+            Detach();
+            return;
+        }
+
+        UpdateWindowPosition();
+
+        if (_isPickingCoord || _isScreenshotRegion)
+        {
+            UpdateCrosshair();
+            // 持续限制光标到窗口范围内，防止游戏鼠标出现
+            // 使用定时器比依赖鼠标事件更可靠
+            ClipCursorToWindow();
+        }
+    }
+
+    private void UpdateWindowPosition()
+    {
+        if (_targetHwnd == 0) return;
+
+        if (GetClientRect(_targetHwnd, out var clientRect) &&
+                ClientToScreen(_targetHwnd, out var point))
+        {
+            Left = point.X / _dpiScale;
+            Top = point.Y / _dpiScale;
+            Width = (clientRect.Right - clientRect.Left) / _dpiScale;
+            Height = (clientRect.Bottom - clientRect.Top) / _dpiScale;
+        }
+    }
+    private void ClipCursorToWindow()
+    {
+        var rect = new RECT {
+                Left = (int)(Left * _dpiScale),
+                Top = (int)(Top * _dpiScale),
+                Right = (int)((Left + Width) * _dpiScale),
+                Bottom = (int)((Top + Height) * _dpiScale)
+        };
+        ClipCursor(ref rect);
+    }
+
+    private void UpdateCrosshair()
+    {
+        GetCursorPos(out var screenPos);
+
+        int physX = (int)(screenPos.X - Left * _dpiScale);
+        int physY = (int)(screenPos.Y - Top * _dpiScale);
+
+        double logX = screenPos.X / _dpiScale - Left;
+        double logY = screenPos.Y / _dpiScale - Top;
+
+        CrosshairH.Y1 = logY;
+        CrosshairH.Y2 = logY;
+        CrosshairH.X2 = Width;
+
+        CrosshairV.X1 = logX;
+        CrosshairV.X2 = logX;
+        CrosshairV.Y2 = Height;
+
+        CoordText.Text = $"X: {physX}  Y: {physY}";
+
+        double panelX = logX + 20;
+        double panelY = logY + 20;
+
+        CoordPanel.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+        var panelSize = CoordPanel.DesiredSize;
+
+        if (panelX + panelSize.Width > Width - 10)
+            panelX = logX - panelSize.Width - 15;
+        if (panelY + panelSize.Height > Height - 10)
+            panelY = logY - panelSize.Height - 15;
+
+        Canvas.SetLeft(CoordPanel, Math.Max(5, panelX));
+        Canvas.SetTop(CoordPanel, Math.Max(5, panelY));
+    }
+
+#region 信息显示
+
+    public void ShowInfo(string key, string text, Brush? foreground = null)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            var existing = InfoPanel.Children.OfType<Border>()
+                    .FirstOrDefault(b => b.Tag?.ToString() == key);
+
+            if (existing != null)
+            {
+                if (existing.Child is TextBlock tb) tb.Text = text;
+            }
+            else
+            {
+                var border = new Border {
+                        Tag = key,
+                        Background = new SolidColorBrush(Color.FromArgb(200, 0, 0, 0)),
+                        CornerRadius = new CornerRadius(4),
+                        Padding = new Thickness(8, 4, 8, 4),
+                        Margin = new Thickness(0, 0, 0, 4),
+                        Child = new TextBlock {
+                                Text = text,
+                                Foreground = foreground ?? Brushes.White,
+                                FontFamily = new FontFamily("Consolas"),
+                                FontSize = 12
+                        }
+                };
+                InfoPanel.Children.Add(border);
+            }
+        });
+    }
+
+    public void HideInfo(string key)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            var existing = InfoPanel.Children.OfType<Border>()
+                    .FirstOrDefault(b => b.Tag?.ToString() == key);
+            if (existing != null)
+                InfoPanel.Children.Remove(existing);
+        });
+    }
+
+    public void ClearInfo()
+    {
+        Dispatcher.Invoke(() => InfoPanel.Children.Clear());
+    }
+
+#endregion
+
+#region 日志
 
     /// <summary>从任意线程接收屏幕日志事件，过滤后投递到 UI 线程</summary>
     private void OnScreenLogReceived(string level, string message)
@@ -163,37 +379,7 @@ public partial class OverlayWindow : System.Windows.Window
             LogLines.Children.RemoveAt(0);
     }
 
-    // ─────────────────────────────────────────────────────────
-
-    private void UpdatePosition(object? sender, EventArgs e)
-    {
-        if (_targetHwnd == 0) return;
-
-        if (!IsWindow(_targetHwnd))
-        {
-            Detach();
-            return;
-        }
-
-        UpdateWindowPosition();
-
-        if (_isPickingCoord)
-            UpdateCrosshair();
-    }
-
-    private void UpdateWindowPosition()
-    {
-        if (_targetHwnd == 0) return;
-
-        if (GetClientRect(_targetHwnd, out var clientRect) &&
-                ClientToScreen(_targetHwnd, out var point))
-        {
-            Left = point.X / _dpiScale;
-            Top = point.Y / _dpiScale;
-            Width = (clientRect.Right - clientRect.Left) / _dpiScale;
-            Height = (clientRect.Bottom - clientRect.Top) / _dpiScale;
-        }
-    }
+#endregion
 
 #region 绘制功能
 
@@ -323,57 +509,6 @@ public partial class OverlayWindow : System.Windows.Window
 
 #endregion
 
-#region 信息显示
-
-    public void ShowInfo(string key, string text, Brush? foreground = null)
-    {
-        Dispatcher.Invoke(() =>
-        {
-            var existing = InfoPanel.Children.OfType<Border>()
-                    .FirstOrDefault(b => b.Tag?.ToString() == key);
-
-            if (existing != null)
-            {
-                if (existing.Child is TextBlock tb) tb.Text = text;
-            }
-            else
-            {
-                var border = new Border {
-                        Tag = key,
-                        Background = new SolidColorBrush(Color.FromArgb(200, 0, 0, 0)),
-                        CornerRadius = new CornerRadius(4),
-                        Padding = new Thickness(8, 4, 8, 4),
-                        Margin = new Thickness(0, 0, 0, 4),
-                        Child = new TextBlock {
-                                Text = text,
-                                Foreground = foreground ?? Brushes.White,
-                                FontFamily = new FontFamily("Consolas"),
-                                FontSize = 12
-                        }
-                };
-                InfoPanel.Children.Add(border);
-            }
-        });
-    }
-
-    public void HideInfo(string key)
-    {
-        Dispatcher.Invoke(() =>
-        {
-            var existing = InfoPanel.Children.OfType<Border>()
-                    .FirstOrDefault(b => b.Tag?.ToString() == key);
-            if (existing != null)
-                InfoPanel.Children.Remove(existing);
-        });
-    }
-
-    public void ClearInfo()
-    {
-        Dispatcher.Invoke(() => InfoPanel.Children.Clear());
-    }
-
-#endregion
-
 #region 坐标拾取
 
     public void StartPickCoord(Action<int, int> onPicked)
@@ -381,13 +516,12 @@ public partial class OverlayWindow : System.Windows.Window
         _onCoordPicked = onPicked;
         _isPickingCoord = true;
 
-        BringTargetWindowToFront();
-
-        var exStyle = GetWindowLong(_overlayHwnd, GWL_EXSTYLE);
-        SetWindowLong(_overlayHwnd, GWL_EXSTYLE, exStyle & ~WS_EX_TRANSPARENT);
+        HideAppWindow();
+        SetOverlayReceivesInput(true);
 
         IsHitTestVisible = true;
-        PickBorder.Visibility = Visibility.Visible;
+        DrawBorder.Visibility = Visibility.Visible;
+        PickCoordCanvas.Visibility = Visibility.Visible;
         CrosshairCanvas.Visibility = Visibility.Visible;
         CoordCanvas.Visibility = Visibility.Visible;
 
@@ -395,8 +529,6 @@ public partial class OverlayWindow : System.Windows.Window
         CrosshairH.X2 = Width;
         CrosshairV.Y1 = 0;
         CrosshairV.Y2 = Height;
-
-        ClipCursorToWindow();
 
         MouseMove += OnPickMouseMove;
         MouseLeftButtonDown += OnPickMouseClick;
@@ -412,11 +544,12 @@ public partial class OverlayWindow : System.Windows.Window
         _isPickingCoord = false;
         _onCoordPicked = null;
 
-        var exStyle = GetWindowLong(_overlayHwnd, GWL_EXSTYLE);
-        SetWindowLong(_overlayHwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT);
+        ShowAppWindow();
+        SetOverlayReceivesInput(false);
 
         IsHitTestVisible = false;
-        PickBorder.Visibility = Visibility.Collapsed;
+        DrawBorder.Visibility = Visibility.Collapsed;
+        PickCoordCanvas.Visibility = Visibility.Collapsed;
         CrosshairCanvas.Visibility = Visibility.Collapsed;
         CoordCanvas.Visibility = Visibility.Collapsed;
 
@@ -427,61 +560,6 @@ public partial class OverlayWindow : System.Windows.Window
         KeyDown -= OnPickKeyDown;
     }
 
-    private void BringTargetWindowToFront()
-    {
-        if (_targetHwnd == 0) return;
-
-        if (IsIconic(_targetHwnd))
-            ShowWindow(_targetHwnd, 9);
-
-        SetForegroundWindow(_targetHwnd);
-    }
-
-    private void ClipCursorToWindow()
-    {
-        var rect = new RECT {
-                Left = (int)(Left * _dpiScale),
-                Top = (int)(Top * _dpiScale),
-                Right = (int)((Left + Width) * _dpiScale),
-                Bottom = (int)((Top + Height) * _dpiScale)
-        };
-        ClipCursor(ref rect);
-    }
-
-    private void UpdateCrosshair()
-    {
-        GetCursorPos(out var screenPos);
-
-        int physX = (int)(screenPos.X - Left * _dpiScale);
-        int physY = (int)(screenPos.Y - Top * _dpiScale);
-
-        double logX = screenPos.X / _dpiScale - Left;
-        double logY = screenPos.Y / _dpiScale - Top;
-
-        CrosshairH.Y1 = logY;
-        CrosshairH.Y2 = logY;
-        CrosshairH.X2 = Width;
-
-        CrosshairV.X1 = logX;
-        CrosshairV.X2 = logX;
-        CrosshairV.Y2 = Height;
-
-        CoordText.Text = $"X: {physX}  Y: {physY}";
-
-        double panelX = logX + 20;
-        double panelY = logY + 20;
-
-        CoordPanel.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
-        var panelSize = CoordPanel.DesiredSize;
-
-        if (panelX + panelSize.Width > Width - 10)
-            panelX = logX - panelSize.Width - 15;
-        if (panelY + panelSize.Height > Height - 10)
-            panelY = logY - panelSize.Height - 15;
-
-        Canvas.SetLeft(CoordPanel, Math.Max(5, panelX));
-        Canvas.SetTop(CoordPanel, Math.Max(5, panelY));
-    }
 
     private void OnPickMouseMove(object sender, MouseEventArgs e) { }
 
@@ -500,6 +578,120 @@ public partial class OverlayWindow : System.Windows.Window
     {
         if (e.Key == Key.Escape)
             StopPickCoord();
+    }
+
+#endregion
+
+#region 截图框选
+
+    /// <summary>
+    /// 在目标窗口上拖拽框选区域，完成后回调 (x, y, width, height) 客户区坐标；取消时 (0,0,0,0)。
+    /// </summary>
+    public void StartScreenshotRegion(Action<int, int, int, int> onComplete)
+    {
+        _onScreenshotRegionComplete = onComplete;
+        _isScreenshotRegion = true;
+
+        HideAppWindow();
+        SetOverlayReceivesInput(true);
+
+        IsHitTestVisible = true;
+        DrawBorder.Visibility = Visibility.Visible;
+        CrosshairCanvas.Visibility = Visibility.Visible;
+        CoordCanvas.Visibility = Visibility.Visible;
+        CrosshairH.X1 = 0;
+        CrosshairH.X2 = Width;
+        CrosshairV.Y1 = 0;
+        CrosshairV.Y2 = Height;
+
+        ScreenshotCanvas.Visibility = Visibility.Visible;
+        ScreenshotRect.Width = 0;
+        ScreenshotRect.Height = 0;
+
+        MouseLeftButtonDown += OnScreenshotMouseDown;
+        MouseMove += OnScreenshotMouseMove;
+        MouseLeftButtonUp += OnScreenshotMouseUp;
+        KeyDown += OnScreenshotKeyDown;
+
+        Topmost = true;
+        Activate();
+        Focus();
+    }
+
+    public void StopScreenshotRegion()
+    {
+        _isScreenshotRegion = false;
+        _onScreenshotRegionComplete = null;
+
+        ShowAppWindow();
+        SetOverlayReceivesInput(false);
+
+        IsHitTestVisible = false;
+        DrawBorder.Visibility = Visibility.Collapsed;
+        CrosshairCanvas.Visibility = Visibility.Collapsed;
+        CoordCanvas.Visibility = Visibility.Collapsed;
+        ScreenshotCanvas.Visibility = Visibility.Collapsed;
+
+        MouseLeftButtonDown -= OnScreenshotMouseDown;
+        MouseMove -= OnScreenshotMouseMove;
+        MouseLeftButtonUp -= OnScreenshotMouseUp;
+        KeyDown -= OnScreenshotKeyDown;
+    }
+
+    private void OnScreenshotMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        var pos = e.GetPosition(this);
+        _screenshotStart = pos;
+        Canvas.SetLeft(ScreenshotRect, pos.X);
+        Canvas.SetTop(ScreenshotRect, pos.Y);
+        ScreenshotRect.Width = 0;
+        ScreenshotRect.Height = 0;
+    }
+
+    private void OnScreenshotMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+
+        var pos = e.GetPosition(this);
+        double x = Math.Min(_screenshotStart.X, pos.X);
+        double y = Math.Min(_screenshotStart.Y, pos.Y);
+        double w = Math.Abs(pos.X - _screenshotStart.X);
+        double h = Math.Abs(pos.Y - _screenshotStart.Y);
+
+        Canvas.SetLeft(ScreenshotRect, x);
+        Canvas.SetTop(ScreenshotRect, y);
+        ScreenshotRect.Width = w;
+        ScreenshotRect.Height = h;
+    }
+
+    private void OnScreenshotMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        var pos = e.GetPosition(this);
+        int x1 = (int)(Math.Min(_screenshotStart.X, pos.X) * _dpiScale);
+        int y1 = (int)(Math.Min(_screenshotStart.Y, pos.Y) * _dpiScale);
+        int x2 = (int)(Math.Max(_screenshotStart.X, pos.X) * _dpiScale);
+        int y2 = (int)(Math.Max(_screenshotStart.Y, pos.Y) * _dpiScale);
+
+        int w = x2 - x1;
+        int h = y2 - y1;
+
+        var callback = _onScreenshotRegionComplete;
+        StopScreenshotRegion();
+
+        if (w >= 5 && h >= 5)
+            callback?.Invoke(x1, y1, w, h);
+        else
+            callback?.Invoke(0, 0, 0, 0);
+    }
+
+    private void OnScreenshotKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            var cb = _onScreenshotRegionComplete;
+            StopScreenshotRegion();
+            cb?.Invoke(0, 0, 0, 0);
+        }
     }
 
 #endregion
@@ -544,6 +736,19 @@ public partial class OverlayWindow : System.Windows.Window
 
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(nint hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnableWindow(nint hWnd, bool bEnable);
+
+    [DllImport("user32.dll")]
+    private static extern bool BringWindowToTop(nint hWnd);
+
+    private const int SW_HIDE = 0;
+    private const int SW_SHOW = 5;
+    private static readonly nint HWND_TOPMOST = new nint(-1);
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOACTIVATE = 0x0010;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT

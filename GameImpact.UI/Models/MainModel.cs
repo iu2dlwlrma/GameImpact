@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -586,6 +587,137 @@ public partial class MainModel : ObservableObject
         {
             Log.ErrorScreen(ex, "[OCR] 全屏识别失败");
             return null;
+        }
+    }
+
+    /// <summary>
+    /// 模板图片保存目录，与 logs 同级。
+    /// </summary>
+    public static string TemplatesFolderPath => Path.Combine(AppContext.BaseDirectory, "templates");
+
+    /// <summary>
+    /// 启动截图工具：在目标窗口上框选区域，截取后保存到模板文件夹。
+    /// </summary>
+    public void StartScreenshotTool(Action? onSaved = null)
+    {
+        if (!IsCapturing || _context.Capture == null)
+        {
+            Log.WarnScreen("[截图] 请先启动捕获");
+            return;
+        }
+
+        OverlayWindow.Instance.StartScreenshotRegion((x, y, w, h) =>
+        {
+            if (w <= 0 || h <= 0)
+            {
+                Log.InfoScreen("[截图] 已取消");
+                return;
+            }
+
+            try
+            {
+                var frame = _context.Capture.Capture();
+                if (frame == null)
+                {
+                    Log.WarnScreen("[截图] 无法获取帧");
+                    return;
+                }
+
+                using (frame)
+                {
+                    if (x + w > frame.Width || y + h > frame.Height)
+                    {
+                        Log.WarnScreen("[截图] 选区超出边界");
+                        return;
+                    }
+
+                    var roi = new Rect(x, y, w, h);
+                    using var crop = new Mat(frame, roi);
+                    Directory.CreateDirectory(TemplatesFolderPath);
+                    var name = $"template_{DateTime.Now:yyyyMMdd_HHmmss}.png";
+                    var path = Path.Combine(TemplatesFolderPath, name);
+                    Cv2.ImWrite(path, crop);
+                    Log.InfoScreen("[截图] 已保存: {Name}", name);
+                    onSaved?.Invoke();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.ErrorScreen(ex, "[截图] 保存失败");
+            }
+        });
+    }
+
+    /// <summary>
+    /// 获取模板文件夹中的模板文件名列表（按时间倒序）。
+    /// </summary>
+    public List<string> GetTemplateFileNames()
+    {
+        if (!Directory.Exists(TemplatesFolderPath))
+            return new List<string>();
+        return Directory.GetFiles(TemplatesFolderPath, "*.png")
+            .Select(Path.GetFileName)
+            .Where(f => f != null)
+            .Cast<string>()
+            .OrderByDescending(f => f)
+            .ToList();
+    }
+
+    /// <summary>
+    /// 用当前画面与指定模板匹配，返回是否找到及中心坐标、置信度。
+    /// </summary>
+    public (bool found, int centerX, int centerY, double confidence) MatchWithTemplate(string? fileName)
+    {
+        if (string.IsNullOrEmpty(fileName))
+            return (false, 0, 0, 0);
+        if (!IsCapturing || _context.Capture == null)
+        {
+            Log.WarnScreen("[识别] 请先启动捕获");
+            return (false, 0, 0, 0);
+        }
+
+        var path = Path.Combine(TemplatesFolderPath, fileName);
+        if (!File.Exists(path))
+        {
+            Log.WarnScreen("[识别] 模板不存在: {File}", fileName);
+            return (false, 0, 0, 0);
+        }
+
+        try
+        {
+            using var template = Cv2.ImRead(path);
+            if (template.Empty())
+            {
+                Log.WarnScreen("[识别] 无法读取模板: {File}", fileName);
+                return (false, 0, 0, 0);
+            }
+
+            var frame = _context.Capture.Capture();
+            if (frame == null)
+            {
+                Log.WarnScreen("[识别] 无法获取当前帧");
+                return (false, 0, 0, 0);
+            }
+
+            using (frame)
+            {
+                var result = _context.Recognition.MatchTemplate(frame, template);
+                if (result.Success)
+                {
+                    var rect = new Rect(result.Location.X, result.Location.Y, result.Size.Width, result.Size.Height);
+                    OverlayWindow.Instance.DrawOcrResult(rect, [(new OpenCvSharp.Rect(0, 0, result.Size.Width, result.Size.Height), $"匹配 {result.Confidence:P0}")]);
+                    Log.InfoScreen("[识别] 找到模板 '{File}' 中心=({X},{Y}) 置信度={Conf:P0}", fileName, result.Center.X, result.Center.Y, result.Confidence);
+                    return (true, result.Center.X, result.Center.Y, result.Confidence);
+                }
+
+                Log.InfoScreen("[识别] 未匹配到模板 '{File}'", fileName);
+                return (false, 0, 0, 0);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.ErrorScreen(ex, "[识别] 模板匹配失败");
+            return (false, 0, 0, 0);
         }
     }
 

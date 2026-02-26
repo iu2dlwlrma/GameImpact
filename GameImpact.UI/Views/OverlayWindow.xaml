@@ -11,27 +11,39 @@
 
     <Grid x:Name="RootGrid">
 
-        <!-- 边框（拾取模式时显示） -->
-        <Border x:Name="PickBorder" BorderThickness="3" BorderBrush="#00FF00" Visibility="Collapsed"/>
+        <!-- 边框（拾取坐标 / 截图模式时显示，提示已进入） -->
+        <Border x:Name="DrawBorder" BorderThickness="1" BorderBrush="#00FF00" Visibility="Collapsed" />
+
+        <!-- 坐标拾取模式覆盖层（背景近乎透明但可接收鼠标，防止鼠标穿透到游戏窗口） -->
+        <Canvas x:Name="PickCoordCanvas" Visibility="Collapsed" Background="#01FFFFFF" />
+
+        <!-- 截图选区（拖拽框选时显示，背景近乎透明但可接收鼠标） -->
+        <Canvas x:Name="ScreenshotCanvas" Visibility="Collapsed" Background="#01FFFFFF">
+            <Rectangle x:Name="ScreenshotRect" Stroke="#00FFFF" StrokeThickness="1"
+                       StrokeDashArray="4,2"
+                       Fill="#4000FF00" />
+        </Canvas>
 
         <!-- 绘制层 Canvas -->
-        <Canvas x:Name="DrawCanvas"/>
+        <Canvas x:Name="DrawCanvas" />
 
         <!-- 十字线 Canvas -->
         <Canvas x:Name="CrosshairCanvas" Visibility="Collapsed">
-            <Line x:Name="CrosshairH" Stroke="#00FF00" StrokeThickness="1" StrokeDashArray="4,2"/>
-            <Line x:Name="CrosshairV" Stroke="#00FF00" StrokeThickness="1" StrokeDashArray="4,2"/>
+            <Line x:Name="CrosshairH" Stroke="#00FF00" StrokeThickness="1" StrokeDashArray="4,2" />
+            <Line x:Name="CrosshairV" Stroke="#00FF00" StrokeThickness="1" StrokeDashArray="4,2" />
         </Canvas>
 
         <!-- 坐标显示 -->
         <Canvas x:Name="CoordCanvas" Visibility="Collapsed">
             <Border x:Name="CoordPanel" Background="#DD000000" CornerRadius="4" Padding="10,6">
-                <TextBlock x:Name="CoordText" Foreground="#00FF00" FontFamily="Consolas" FontSize="14" FontWeight="Bold"/>
+                <TextBlock x:Name="CoordText" Foreground="#00FF00" FontFamily="Consolas"
+                           FontSize="14" FontWeight="Bold" />
             </Border>
         </Canvas>
 
         <!-- 信息显示区域（左上角） -->
-        <StackPanel x:Name="InfoPanel" Margin="10" VerticalAlignment="Top" HorizontalAlignment="Left"/>
+        <StackPanel x:Name="InfoPanel" Margin="10" VerticalAlignment="Top"
+                    HorizontalAlignment="Left" />
 
         <!-- ====== 叠加日志面板（左下角） ====== -->
         <Border x:Name="LogOverlayPanel"
@@ -46,17 +58,17 @@
                 <DockPanel Margin="0,0,0,3">
                     <TextBlock Text="LOG" Foreground="#555555"
                                FontFamily="Consolas" FontSize="10" FontWeight="Bold"
-                               VerticalAlignment="Center"/>
+                               VerticalAlignment="Center" />
                     <TextBlock x:Name="LogLevelBadge"
                                Foreground="#555555" FontFamily="Consolas" FontSize="10"
-                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                               HorizontalAlignment="Right" VerticalAlignment="Center" />
                 </DockPanel>
 
                 <!-- 分隔线 -->
-                <Rectangle Height="1" Fill="#333333" Margin="0,0,0,4"/>
+                <Rectangle Height="1" Fill="#333333" Margin="0,0,0,4" />
 
                 <!-- 日志行容器（最多显示 MaxLogLines 行） -->
-                <StackPanel x:Name="LogLines"/>
+                <StackPanel x:Name="LogLines" />
 
             </StackPanel>
         </Border>
