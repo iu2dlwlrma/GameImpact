@@ -45,7 +45,7 @@ public static class Log
     /// <summary>
     /// 屏幕日志消息事件。
     /// <para>仅在调用 XxxScreen 系列方法时触发，参数为 (级别缩写, 格式化后的消息)。</para>
-    /// <para>UI 层（MainViewModel、OverlayWindow）应订阅此事件来展示关键业务日志。</para>
+    /// <para>UI 层（MainModel、OverlayWindow）应订阅此事件来展示关键业务日志。</para>
     /// </summary>
     public static event Action<string, string>? OnScreenLogMessage;
 

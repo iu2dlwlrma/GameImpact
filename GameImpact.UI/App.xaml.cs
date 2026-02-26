@@ -1,6 +1,7 @@
 using System;
 using System.Text;
 using System.Windows;
+using System.Windows.Controls;
 using GameImpact.Core;
 using GameImpact.UI.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,12 +12,43 @@ using AppLog = GameImpact.Utilities.Logging.Log;
 
 namespace GameImpact.UI;
 
-public partial class App
+/// <summary>
+/// GameImpact 通用应用基类。
+/// 子项目继承此类即可复用：Serilog 日志、DI 容器、Host 生命周期、主题、Shell 窗口（标题栏/调试面板/状态栏）。
+/// </summary>
+public abstract class GameImpactApp : Application
 {
-    private readonly IHost _host;
+    private IHost? _host;
 
-    public App()
+    /// <summary>
+    /// 应用显示名称，用于窗口标题和日志前缀。子类覆写此属性自定义名称。
+    /// </summary>
+    public virtual string AppName => "GameImpact";
+
+    /// <summary>
+    /// DI 容器
+    /// </summary>
+    public IHost Host => _host ?? throw new InvalidOperationException("Host 尚未初始化");
+
+    /// <summary>
+    /// 子类覆写以注册自己的服务。
+    /// 注意：GameImpact 核心服务（GameContext, Input, OCR 等）和 Shell 自身的服务已默认注册。
+    /// </summary>
+    protected virtual void ConfigureServices(IServiceCollection services)
     {
+    }
+
+    /// <summary>
+    /// 子类覆写以提供自己的业务内容视图，会被嵌入到 Shell 主窗口的内容区域。
+    /// 返回 null 则使用 Shell 的默认视图（捕获状态面板）。
+    /// </summary>
+    protected virtual FrameworkElement? CreateContentView(IServiceProvider services) => null;
+
+    protected override async void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+
+        // 初始化 Serilog
         Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Debug()
                 .Enrich.FromLogContext()
@@ -25,44 +57,60 @@ public partial class App
                 .WriteTo.File("logs/app-.log",
                         rollingInterval: RollingInterval.Day,
                         encoding: Encoding.UTF8,
-                        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
+                        outputTemplate:
+                        "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
                 .CreateLogger();
 
-        _host = Host.CreateDefaultBuilder()
+        // 构建 Host
+        _host = Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
                 .UseSerilog()
                 .ConfigureServices((_, services) =>
                 {
+                    // 注册核心服务
                     services.AddGameImpact();
+                    // 注册 Shell 窗口和 MainModel
                     services.AddSingleton<MainWindow>();
-                    services.AddSingleton<MainViewModel>();
+                    services.AddSingleton<MainModel>();
+                    // 让子类注册自己的服务
+                    ConfigureServices(services);
                 })
                 .Build();
 
+        // 初始化日志
         var loggerFactory = _host.Services.GetRequiredService<ILoggerFactory>();
         AppLog.Initialize(loggerFactory);
-    }
-
-    protected override async void OnStartup(StartupEventArgs e)
-    {
-        base.OnStartup(e);
 
         // 初始化主题
         ThemeService.Instance.SetTheme(AppTheme.Dark);
 
-        AppLog.Info("GameImpact starting...");
+        AppLog.Info("{AppName} starting...", AppName);
         await _host.StartAsync();
 
+        // 创建并显示 Shell 主窗口
         var mainWindow = _host.Services.GetRequiredService<MainWindow>();
+        mainWindow.ShellTitle = AppName;
+
+        // 获取子类提供的内容视图
+        var contentView = CreateContentView(_host.Services);
+        if (contentView != null)
+        {
+            mainWindow.SetContentView(contentView);
+        }
+
         mainWindow.Show();
 
-        AppLog.Info("GameImpact started");
+        AppLog.Info("{AppName} started", AppName);
     }
 
     protected override async void OnExit(ExitEventArgs e)
     {
-        AppLog.Info("GameImpact exiting...");
-        await _host.StopAsync();
-        _host.Dispose();
+        AppLog.Info("{AppName} exiting...", AppName);
+        if (_host != null)
+        {
+            await _host.StopAsync();
+            _host.Dispose();
+        }
+
         await Log.CloseAndFlushAsync();
         base.OnExit(e);
     }

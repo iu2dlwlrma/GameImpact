@@ -33,17 +33,15 @@ public partial class OverlayWindow : System.Windows.Window
 
     // ── 叠加日志 ──────────────────────────────────────────────
     /// <summary>日志级别优先级，数值越大越严重</summary>
-    private static readonly Dictionary<string, int> LevelPriority = new()
-    {
-        ["DBG"] = 0, ["INF"] = 1, ["WRN"] = 2, ["ERR"] = 3
+    private static readonly Dictionary<string, int> LevelPriority = new() {
+            ["DBG"] = 0, ["INF"] = 1, ["WRN"] = 2, ["ERR"] = 3
     };
 
-    private static readonly Dictionary<string, Brush> LevelColor = new()
-    {
-        ["DBG"] = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
-        ["INF"] = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
-        ["WRN"] = new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00)),
-        ["ERR"] = new SolidColorBrush(Color.FromRgb(0xFF, 0x55, 0x55)),
+    private static readonly Dictionary<string, Brush> LevelColor = new() {
+            ["DBG"] = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
+            ["INF"] = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
+            ["WRN"] = new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00)),
+            ["ERR"] = new SolidColorBrush(Color.FromRgb(0xFF, 0x55, 0x55)),
     };
 
     private const int MaxLogLines = 18;
@@ -87,11 +85,11 @@ public partial class OverlayWindow : System.Windows.Window
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         _overlayHwnd = new WindowInteropHelper(this).Handle;
-        
+
         var source = PresentationSource.FromVisual(this);
         if (source?.CompositionTarget != null)
             _dpiScale = source.CompositionTarget.TransformToDevice.M11;
-        
+
         var exStyle = GetWindowLong(_overlayHwnd, GWL_EXSTYLE);
         SetWindowLong(_overlayHwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
     }
@@ -99,11 +97,11 @@ public partial class OverlayWindow : System.Windows.Window
     public void AttachTo(nint targetHwnd)
     {
         _targetHwnd = targetHwnd;
-        
+
         var monitor = MonitorFromWindow(targetHwnd, 2);
         if (GetDpiForMonitor(monitor, 0, out uint dpiX, out _) == 0)
             _dpiScale = dpiX / 96.0;
-        
+
         UpdateWindowPosition();
         Show();
         _positionTimer.Start();
@@ -148,15 +146,14 @@ public partial class OverlayWindow : System.Windows.Window
     {
         var color = LevelColor.GetValueOrDefault(level, LevelColor["INF"]);
 
-        var line = new TextBlock
-        {
-            FontFamily   = new FontFamily("Consolas"),
-            FontSize     = 11,
-            Foreground   = color,
-            TextWrapping = TextWrapping.NoWrap,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            Margin       = new Thickness(0, 1, 0, 0),
-            Text         = $"[{level}] {message}"
+        var line = new TextBlock {
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 11,
+                Foreground = color,
+                TextWrapping = TextWrapping.NoWrap,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Margin = new Thickness(0, 1, 0, 0),
+                Text = $"[{level}] {message}"
         };
 
         LogLines.Children.Add(line);
@@ -171,15 +168,15 @@ public partial class OverlayWindow : System.Windows.Window
     private void UpdatePosition(object? sender, EventArgs e)
     {
         if (_targetHwnd == 0) return;
-        
+
         if (!IsWindow(_targetHwnd))
         {
             Detach();
             return;
         }
-        
+
         UpdateWindowPosition();
-        
+
         if (_isPickingCoord)
             UpdateCrosshair();
     }
@@ -187,9 +184,9 @@ public partial class OverlayWindow : System.Windows.Window
     private void UpdateWindowPosition()
     {
         if (_targetHwnd == 0) return;
-        
-        if (GetClientRect(_targetHwnd, out var clientRect) && 
-            ClientToScreen(_targetHwnd, out var point))
+
+        if (GetClientRect(_targetHwnd, out var clientRect) &&
+                ClientToScreen(_targetHwnd, out var point))
         {
             Left = point.X / _dpiScale;
             Top = point.Y / _dpiScale;
@@ -198,13 +195,14 @@ public partial class OverlayWindow : System.Windows.Window
         }
     }
 
-    #region 绘制功能
+#region 绘制功能
 
     /// <summary>
     /// 绘制点击标记
     /// </summary>
-    public void DrawClickMarker(int x, int y, int duration = 2000)
+    public void DrawClickMarker(int x, int y, bool success, int duration = 2000)
     {
+        Brush color = success ? Brushes.LawnGreen : Brushes.Red;
         Dispatcher.Invoke(() =>
         {
             double logX = x / _dpiScale;
@@ -212,20 +210,17 @@ public partial class OverlayWindow : System.Windows.Window
 
             // 十字标记
             var cross = new Canvas { Tag = "click" };
-            var lineH = new Line
-            {
-                X1 = logX - 10, Y1 = logY, X2 = logX + 10, Y2 = logY,
-                Stroke = Brushes.Red, StrokeThickness = 2
+            var lineH = new Line {
+                    X1 = logX - 10, Y1 = logY, X2 = logX + 10, Y2 = logY,
+                    Stroke = color, StrokeThickness = 2
             };
-            var lineV = new Line
-            {
-                X1 = logX, Y1 = logY - 10, X2 = logX, Y2 = logY + 10,
-                Stroke = Brushes.Red, StrokeThickness = 2
+            var lineV = new Line {
+                    X1 = logX, Y1 = logY - 10, X2 = logX, Y2 = logY + 10,
+                    Stroke = color, StrokeThickness = 2
             };
-            var circle = new Ellipse
-            {
-                Width = 16, Height = 16,
-                Stroke = Brushes.Red, StrokeThickness = 2
+            var circle = new Ellipse {
+                    Width = 16, Height = 16,
+                    Stroke = color, StrokeThickness = 2
             };
             Canvas.SetLeft(circle, logX - 8);
             Canvas.SetTop(circle, logY - 8);
@@ -261,11 +256,10 @@ public partial class OverlayWindow : System.Windows.Window
             double roiW = roi.Width / _dpiScale;
             double roiH = roi.Height / _dpiScale;
 
-            var roiRect = new Rectangle
-            {
-                Width = roiW, Height = roiH,
-                Stroke = Brushes.Cyan, StrokeThickness = 2,
-                StrokeDashArray = new DoubleCollection { 4, 2 }
+            var roiRect = new Rectangle {
+                    Width = roiW, Height = roiH,
+                    Stroke = Brushes.Cyan, StrokeThickness = 2,
+                    StrokeDashArray = new DoubleCollection { 4, 2 }
             };
             Canvas.SetLeft(roiRect, roiX);
             Canvas.SetTop(roiRect, roiY);
@@ -280,29 +274,26 @@ public partial class OverlayWindow : System.Windows.Window
                 double bh = box.Height / _dpiScale;
 
                 // 文字框
-                var rect = new Rectangle
-                {
-                    Width = bw, Height = bh,
-                    Stroke = Brushes.LimeGreen, StrokeThickness = 1,
-                    Fill = new SolidColorBrush(Color.FromArgb(40, 0, 255, 0))
+                var rect = new Rectangle {
+                        Width = bw, Height = bh,
+                        Stroke = Brushes.LimeGreen, StrokeThickness = 1,
+                        Fill = new SolidColorBrush(Color.FromArgb(40, 0, 255, 0))
                 };
                 Canvas.SetLeft(rect, bx);
                 Canvas.SetTop(rect, by);
                 container.Children.Add(rect);
 
                 // 文字标签
-                var label = new Border
-                {
-                    Background = new SolidColorBrush(Color.FromArgb(220, 0, 0, 0)),
-                    CornerRadius = new CornerRadius(2),
-                    Padding = new Thickness(4, 2, 4, 2),
-                    Child = new TextBlock
-                    {
-                        Text = text,
-                        Foreground = Brushes.LimeGreen,
-                        FontSize = 11,
-                        FontFamily = new FontFamily("Microsoft YaHei")
-                    }
+                var label = new Border {
+                        Background = new SolidColorBrush(Color.FromArgb(220, 0, 0, 0)),
+                        CornerRadius = new CornerRadius(2),
+                        Padding = new Thickness(4, 2, 4, 2),
+                        Child = new TextBlock {
+                                Text = text,
+                                Foreground = Brushes.LimeGreen,
+                                FontSize = 11,
+                                FontFamily = new FontFamily("Microsoft YaHei")
+                        }
                 };
                 Canvas.SetLeft(label, bx);
                 Canvas.SetTop(label, by - 20);
@@ -330,37 +321,35 @@ public partial class OverlayWindow : System.Windows.Window
         Dispatcher.Invoke(() => DrawCanvas.Children.Clear());
     }
 
-    #endregion
+#endregion
 
-    #region 信息显示
+#region 信息显示
 
     public void ShowInfo(string key, string text, Brush? foreground = null)
     {
         Dispatcher.Invoke(() =>
         {
             var existing = InfoPanel.Children.OfType<Border>()
-                .FirstOrDefault(b => b.Tag?.ToString() == key);
-            
+                    .FirstOrDefault(b => b.Tag?.ToString() == key);
+
             if (existing != null)
             {
                 if (existing.Child is TextBlock tb) tb.Text = text;
             }
             else
             {
-                var border = new Border
-                {
-                    Tag = key,
-                    Background = new SolidColorBrush(Color.FromArgb(200, 0, 0, 0)),
-                    CornerRadius = new CornerRadius(4),
-                    Padding = new Thickness(8, 4, 8, 4),
-                    Margin = new Thickness(0, 0, 0, 4),
-                    Child = new TextBlock
-                    {
-                        Text = text,
-                        Foreground = foreground ?? Brushes.White,
-                        FontFamily = new FontFamily("Consolas"),
-                        FontSize = 12
-                    }
+                var border = new Border {
+                        Tag = key,
+                        Background = new SolidColorBrush(Color.FromArgb(200, 0, 0, 0)),
+                        CornerRadius = new CornerRadius(4),
+                        Padding = new Thickness(8, 4, 8, 4),
+                        Margin = new Thickness(0, 0, 0, 4),
+                        Child = new TextBlock {
+                                Text = text,
+                                Foreground = foreground ?? Brushes.White,
+                                FontFamily = new FontFamily("Consolas"),
+                                FontSize = 12
+                        }
                 };
                 InfoPanel.Children.Add(border);
             }
@@ -372,7 +361,7 @@ public partial class OverlayWindow : System.Windows.Window
         Dispatcher.Invoke(() =>
         {
             var existing = InfoPanel.Children.OfType<Border>()
-                .FirstOrDefault(b => b.Tag?.ToString() == key);
+                    .FirstOrDefault(b => b.Tag?.ToString() == key);
             if (existing != null)
                 InfoPanel.Children.Remove(existing);
         });
@@ -383,36 +372,36 @@ public partial class OverlayWindow : System.Windows.Window
         Dispatcher.Invoke(() => InfoPanel.Children.Clear());
     }
 
-    #endregion
+#endregion
 
-    #region 坐标拾取
+#region 坐标拾取
 
     public void StartPickCoord(Action<int, int> onPicked)
     {
         _onCoordPicked = onPicked;
         _isPickingCoord = true;
-        
+
         BringTargetWindowToFront();
-        
+
         var exStyle = GetWindowLong(_overlayHwnd, GWL_EXSTYLE);
         SetWindowLong(_overlayHwnd, GWL_EXSTYLE, exStyle & ~WS_EX_TRANSPARENT);
-        
+
         IsHitTestVisible = true;
         PickBorder.Visibility = Visibility.Visible;
         CrosshairCanvas.Visibility = Visibility.Visible;
         CoordCanvas.Visibility = Visibility.Visible;
-        
+
         CrosshairH.X1 = 0;
         CrosshairH.X2 = Width;
         CrosshairV.Y1 = 0;
         CrosshairV.Y2 = Height;
-        
+
         ClipCursorToWindow();
-        
+
         MouseMove += OnPickMouseMove;
         MouseLeftButtonDown += OnPickMouseClick;
         KeyDown += OnPickKeyDown;
-        
+
         Topmost = true;
         Activate();
         Focus();
@@ -422,17 +411,17 @@ public partial class OverlayWindow : System.Windows.Window
     {
         _isPickingCoord = false;
         _onCoordPicked = null;
-        
+
         var exStyle = GetWindowLong(_overlayHwnd, GWL_EXSTYLE);
         SetWindowLong(_overlayHwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT);
-        
+
         IsHitTestVisible = false;
         PickBorder.Visibility = Visibility.Collapsed;
         CrosshairCanvas.Visibility = Visibility.Collapsed;
         CoordCanvas.Visibility = Visibility.Collapsed;
-        
+
         ClipCursor(IntPtr.Zero);
-        
+
         MouseMove -= OnPickMouseMove;
         MouseLeftButtonDown -= OnPickMouseClick;
         KeyDown -= OnPickKeyDown;
@@ -441,21 +430,20 @@ public partial class OverlayWindow : System.Windows.Window
     private void BringTargetWindowToFront()
     {
         if (_targetHwnd == 0) return;
-        
+
         if (IsIconic(_targetHwnd))
             ShowWindow(_targetHwnd, 9);
-        
+
         SetForegroundWindow(_targetHwnd);
     }
 
     private void ClipCursorToWindow()
     {
-        var rect = new RECT
-        {
-            Left = (int)(Left * _dpiScale),
-            Top = (int)(Top * _dpiScale),
-            Right = (int)((Left + Width) * _dpiScale),
-            Bottom = (int)((Top + Height) * _dpiScale)
+        var rect = new RECT {
+                Left = (int)(Left * _dpiScale),
+                Top = (int)(Top * _dpiScale),
+                Right = (int)((Left + Width) * _dpiScale),
+                Bottom = (int)((Top + Height) * _dpiScale)
         };
         ClipCursor(ref rect);
     }
@@ -463,34 +451,34 @@ public partial class OverlayWindow : System.Windows.Window
     private void UpdateCrosshair()
     {
         GetCursorPos(out var screenPos);
-        
+
         int physX = (int)(screenPos.X - Left * _dpiScale);
         int physY = (int)(screenPos.Y - Top * _dpiScale);
-        
+
         double logX = screenPos.X / _dpiScale - Left;
         double logY = screenPos.Y / _dpiScale - Top;
-        
+
         CrosshairH.Y1 = logY;
         CrosshairH.Y2 = logY;
         CrosshairH.X2 = Width;
-        
+
         CrosshairV.X1 = logX;
         CrosshairV.X2 = logX;
         CrosshairV.Y2 = Height;
-        
+
         CoordText.Text = $"X: {physX}  Y: {physY}";
-        
+
         double panelX = logX + 20;
         double panelY = logY + 20;
-        
+
         CoordPanel.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
         var panelSize = CoordPanel.DesiredSize;
-        
+
         if (panelX + panelSize.Width > Width - 10)
             panelX = logX - panelSize.Width - 15;
         if (panelY + panelSize.Height > Height - 10)
             panelY = logY - panelSize.Height - 15;
-        
+
         Canvas.SetLeft(CoordPanel, Math.Max(5, panelX));
         Canvas.SetTop(CoordPanel, Math.Max(5, panelY));
     }
@@ -502,7 +490,7 @@ public partial class OverlayWindow : System.Windows.Window
         GetCursorPos(out var screenPos);
         int x = (int)(screenPos.X - Left * _dpiScale);
         int y = (int)(screenPos.Y - Top * _dpiScale);
-        
+
         var callback = _onCoordPicked;
         StopPickCoord();
         callback?.Invoke(x, y);
@@ -514,9 +502,9 @@ public partial class OverlayWindow : System.Windows.Window
             StopPickCoord();
     }
 
-    #endregion
+#endregion
 
-    #region Win32 API
+#region Win32 API
 
     [DllImport("user32.dll")]
     private static extern int GetWindowLong(nint hWnd, int nIndex);
@@ -558,10 +546,16 @@ public partial class OverlayWindow : System.Windows.Window
     private static extern bool ShowWindow(nint hWnd, int nCmdShow);
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct RECT { public int Left, Top, Right, Bottom; }
+    private struct RECT
+    {
+        public int Left, Top, Right, Bottom;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct POINT { public int X, Y; }
+    private struct POINT
+    {
+        public int X, Y;
+    }
 
-    #endregion
+#endregion
 }

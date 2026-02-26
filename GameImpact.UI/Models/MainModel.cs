@@ -17,7 +17,7 @@ using OpenCvSharp;
 
 namespace GameImpact.UI;
 
-public partial class MainViewModel : ObservableObject
+public partial class MainModel : ObservableObject
 {
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -36,7 +36,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _isIdle = true;
     [ObservableProperty] private bool _useGpuHdrConversion = true;
     [ObservableProperty] private bool _isPickingCoord;
-    
+
     // Debug 面板属性
     [ObservableProperty] private ImageSource? _previewSource;
     [ObservableProperty] private string _previewResolution = "-";
@@ -50,11 +50,11 @@ public partial class MainViewModel : ObservableObject
     private readonly Stopwatch _fpsTimer = new();
     private WriteableBitmap? _writeableBitmap;
     private bool _isRendering;
-    
+
     // Overlay 窗口
     public OverlayWindow Overlay => OverlayWindow.Instance;
 
-    public MainViewModel(GameContext context)
+    public MainModel(GameContext context)
     {
         _context = context;
 
@@ -64,8 +64,6 @@ public partial class MainViewModel : ObservableObject
         // 监听屏幕日志（业务关键信息）
         Log.OnScreenLogMessage += OnScreenLogReceived;
         _logTimer.Start();
-
-        Log.InfoScreen("GameImpact 已启动");
     }
 
     private void OnLogReceived(string level, string message)
@@ -135,8 +133,8 @@ public partial class MainViewModel : ObservableObject
                 if (!EnablePreview) return;
 
                 if (_writeableBitmap == null ||
-                    _writeableBitmap.PixelWidth != width ||
-                    _writeableBitmap.PixelHeight != height)
+                        _writeableBitmap.PixelWidth != width ||
+                        _writeableBitmap.PixelHeight != height)
                 {
                     _writeableBitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
                     PreviewSource = _writeableBitmap;
@@ -255,7 +253,7 @@ public partial class MainViewModel : ObservableObject
         _isRendering = false;
         CompositionTarget.Rendering -= OnRendering;
         _context.Capture?.Stop();
-        
+
         // 关闭 Overlay
         OverlayWindow.Instance.Detach();
 
@@ -287,7 +285,7 @@ public partial class MainViewModel : ObservableObject
             Log.WarnScreen("[拾取] 请先启动捕获");
             return;
         }
-        
+
         IsPickingCoord = true;
         Log.InfoScreen("[拾取] 开始拾取坐标，点击目标位置或按 ESC 取消");
 
@@ -328,11 +326,11 @@ public partial class MainViewModel : ObservableObject
         {
             await BringTargetToForeground();
 
-            _context.Input.Mouse.ForegroundClickAt(x, y);
+            var result = _context.Input.Mouse.ForegroundClickAt(x, y);
             Log.DebugScreen("[Input] 鼠标点击 ({X}, {Y})", x, y);
-            
+
             // 在 Overlay 上绘制点击标记
-            OverlayWindow.Instance.DrawClickMarker(x, y);
+            OverlayWindow.Instance.DrawClickMarker(x, y, result);
         }
         catch (Exception ex)
         {
@@ -482,7 +480,7 @@ public partial class MainViewModel : ObservableObject
                 var text = string.Join(" ", results.Select(r => r.Text));
                 var confidence = results.Average(r => r.Confidence);
                 Log.InfoScreen("[OCR] 识别结果: {Text} (置信度: {Confidence})", text, confidence.ToString("P0"));
-                
+
                 return text;
             }
         }
@@ -518,23 +516,23 @@ public partial class MainViewModel : ObservableObject
                 var results = _context.Ocr.Recognize(frame);
 
                 // 查找匹配的文本
-                var match = results.FirstOrDefault(r => 
-                    r.Text.Contains(searchText, StringComparison.OrdinalIgnoreCase));
-                
+                var match = results.FirstOrDefault(r =>
+                        r.Text.Contains(searchText, StringComparison.OrdinalIgnoreCase));
+
                 if (match != null)
                 {
                     // 只绘制匹配的结果
                     var fullRoi = new Rect(0, 0, frame.Width, frame.Height);
                     OverlayWindow.Instance.DrawOcrResult(fullRoi, [(match.BoundingBox, match.Text)]);
-                    
+
                     // 返回文本框的中心坐标
                     int centerX = match.BoundingBox.X + match.BoundingBox.Width / 2;
                     int centerY = match.BoundingBox.Y + match.BoundingBox.Height / 2;
-                    
+
                     Log.InfoScreen("[OCR] 找到 '{Text}' 在 ({X}, {Y})", searchText, centerX, centerY);
                     return (centerX, centerY);
                 }
-                
+
                 Log.InfoScreen("[OCR] 未找到 '{Text}'，共识别 {Count} 个文本", searchText, results.Count);
                 return null;
             }
@@ -569,18 +567,18 @@ public partial class MainViewModel : ObservableObject
             using (frame)
             {
                 var results = _context.Ocr.Recognize(frame);
-                
+
                 // 在 Overlay 上绘制所有结果
                 var fullRoi = new Rect(0, 0, frame.Width, frame.Height);
                 var drawResults = results.Select(r => (r.BoundingBox, r.Text)).ToList();
                 OverlayWindow.Instance.DrawOcrResult(fullRoi, drawResults);
 
                 Log.InfoScreen("[OCR] 全屏识别完成，共 {Count} 个文本", results.Count);
-                
+
                 return results.Select(r => (
-                    r.BoundingBox.X + r.BoundingBox.Width / 2,
-                    r.BoundingBox.Y + r.BoundingBox.Height / 2,
-                    r.Text
+                        r.BoundingBox.X + r.BoundingBox.Width / 2,
+                        r.BoundingBox.Y + r.BoundingBox.Height / 2,
+                        r.Text
                 )).ToList();
             }
         }

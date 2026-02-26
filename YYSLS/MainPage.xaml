@@ -1,0 +1,24 @@
+<UserControl x:Class="YYSLS.MainPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="400" d:DesignWidth="800">
+    <Grid>
+        <!-- YYSLS 业务内容区 -->
+        <Border Background="{DynamicResource AppSurface}" CornerRadius="10"
+                BorderBrush="{DynamicResource AppBorderSubtle}" BorderThickness="1">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="🎮" FontSize="42" HorizontalAlignment="Center" Margin="0,0,0,14" />
+                <TextBlock Text="YYSLS 业务内容区"
+                           FontSize="16" FontWeight="SemiBold"
+                           Foreground="{DynamicResource AppText}"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="在此处添加你的业务 UI"
+                           FontSize="12" Foreground="{DynamicResource AppTextMuted}"
+                           HorizontalAlignment="Center" Margin="0,8,0,0" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>
