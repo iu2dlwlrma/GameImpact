@@ -8,7 +8,9 @@ public static class HotkeyParser
     public static (ModifierKeys Modifiers, HotkeyKeys Key) Parse(string hotkeyString)
     {
         if (string.IsNullOrWhiteSpace(hotkeyString))
+        {
             throw new ArgumentException("Hotkey string cannot be empty");
+        }
 
         var modifiers = ModifierKeys.None;
         var key = HotkeyKeys.None;
@@ -35,13 +37,17 @@ public static class HotkeyParser
                     break;
                 default:
                     if (Enum.TryParse<HotkeyKeys>(part, true, out var k))
+                    {
                         key = k;
+                    }
                     break;
             }
         }
 
         if (key == HotkeyKeys.None)
+        {
             throw new ArgumentException($"Invalid hotkey: {hotkeyString}");
+        }
 
         return (modifiers, key);
     }

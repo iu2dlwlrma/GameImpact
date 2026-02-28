@@ -7,10 +7,13 @@ using GameImpact.UI.Views;
 
 namespace GameImpact.UI;
 
+/// <summary>
+/// 主窗口
+/// </summary>
 public partial class MainWindow : Window
 {
-    private readonly MainModel model;
-    private DebugWindow? _debugWindow;
+    private readonly MainModel m_model;
+    private DebugWindow? m_debugWindow;
     private SettingsWindow? m_settingsWindow;
 
     /// <summary>
@@ -31,10 +34,14 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    /// <param name="model">主视图模型</param>
     public MainWindow(MainModel model)
     {
         InitializeComponent();
-        this.model = model;
+        m_model = model;
         DataContext = model;
         
         ThemeService.Instance.ThemeChanged += OnThemeChanged;
@@ -67,9 +74,13 @@ public partial class MainWindow : Window
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ClickCount == 2)
+        {
             ToggleMaximize();
+        }
         else if (e.LeftButton == MouseButtonState.Pressed)
+        {
             DragMove();
+        }
     }
 
     private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
@@ -89,19 +100,19 @@ public partial class MainWindow : Window
     private void DebugPanel_Click(object sender, RoutedEventArgs e)
     {
         // 如果调试窗口已存在且未关闭，则激活它
-        if (_debugWindow is { IsLoaded: true })
+        if (m_debugWindow is { IsLoaded: true })
         {
-            _debugWindow.Activate();
+            m_debugWindow.Activate();
             return;
         }
 
         // 创建新的调试窗口
-        _debugWindow = new DebugWindow(model)
+        m_debugWindow = new DebugWindow(m_model)
         {
             Owner = this
         };
-        _debugWindow.Closed += (_, _) => _debugWindow = null;
-        _debugWindow.Show();
+        m_debugWindow.Closed += (_, _) => m_debugWindow = null;
+        m_debugWindow.Show();
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e)
@@ -124,12 +135,15 @@ public partial class MainWindow : Window
         m_settingsWindow.Show();
     }
 
+    /// <summary>
+    /// 窗口关闭事件处理
+    /// </summary>
     protected override void OnClosed(EventArgs e)
     {
         // 关闭主窗口时同时关闭子窗口
-        _debugWindow?.Close();
+        m_debugWindow?.Close();
         m_settingsWindow?.Close();
-        model.Cleanup();
+        m_model.Cleanup();
         ThemeService.Instance.ThemeChanged -= OnThemeChanged;
         base.OnClosed(e);
     }

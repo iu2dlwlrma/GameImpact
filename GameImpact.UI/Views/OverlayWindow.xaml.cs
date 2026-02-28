@@ -14,20 +14,23 @@ using OpenCvSharp;
 
 namespace GameImpact.UI.Views;
 
+/// <summary>
+/// 覆盖层窗口，用于在目标窗口上显示叠加信息、坐标拾取、截图框选等功能。
+/// </summary>
 public partial class OverlayWindow : System.Windows.Window
 {
-    private static OverlayWindow? _instance;
-    public static OverlayWindow Instance => _instance ??= new OverlayWindow();
+    private static OverlayWindow? s_instance;
+    public static OverlayWindow Instance => s_instance ??= new OverlayWindow();
 
-    private nint _targetHwnd;
-    private nint _overlayHwnd;
-    private readonly DispatcherTimer _positionTimer;
-    private bool _isPickingCoord;
-    private Action<int, int>? _onCoordPicked;
-    private bool _isScreenshotRegion;
-    private Action<int, int, int, int>? _onScreenshotRegionComplete;
-    private System.Windows.Point _screenshotStart;
-    private double _dpiScale = 1.0;
+    private nint m_targetHwnd;
+    private nint m_overlayHwnd;
+    private readonly DispatcherTimer m_positionTimer;
+    private bool m_isPickingCoord;
+    private Action<int, int>? m_onCoordPicked;
+    private bool m_isScreenshotRegion;
+    private Action<int, int, int, int>? m_onScreenshotRegionComplete;
+    private System.Windows.Point m_screenshotStart;
+    private double m_dpiScale = 1.0;
 
     private const int WS_EX_TRANSPARENT = 0x00000020;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -36,11 +39,11 @@ public partial class OverlayWindow : System.Windows.Window
 
     // ── 叠加日志 ──────────────────────────────────────────────
     /// <summary>日志级别优先级，数值越大越严重</summary>
-    private static readonly Dictionary<string, int> LevelPriority = new() {
+    private static readonly Dictionary<string, int> s_levelPriority = new() {
             ["DBG"] = 0, ["INF"] = 1, ["WRN"] = 2, ["ERR"] = 3
     };
 
-    private static readonly Dictionary<string, Brush> LevelColor = new() {
+    private static readonly Dictionary<string, Brush> s_levelColor = new() {
             ["DBG"] = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
             ["INF"] = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
             ["WRN"] = new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00)),
@@ -48,19 +51,19 @@ public partial class OverlayWindow : System.Windows.Window
     };
 
     private const int MaxLogLines = 18;
-    private string _logMinLevel = "INF";
+    private string m_logMinLevel = "INF";
 
     /// <summary>
     /// 显示/隐藏叠加日志面板，并设置最低显示级别（"DBG"/"INF"/"WRN"/"ERR"）。
     /// </summary>
     public void SetOverlayLog(bool visible, string minLevel = "INF")
     {
-        _logMinLevel = LevelPriority.ContainsKey(minLevel) ? minLevel : "INF";
+        m_logMinLevel = s_levelPriority.ContainsKey(minLevel) ? minLevel : "INF";
 
         Dispatcher.Invoke(() =>
         {
             LogOverlayPanel.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-            LogLevelBadge.Text = visible ? $"[{_logMinLevel}+]" : string.Empty;
+            LogLevelBadge.Text = visible ? $"[{m_logMinLevel}+]" : string.Empty;
             if (!visible) LogLines.Children.Clear();
         });
     }
@@ -70,8 +73,8 @@ public partial class OverlayWindow : System.Windows.Window
     {
         InitializeComponent();
 
-        _positionTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(16) };
-        _positionTimer.Tick += UpdatePosition;
+        m_positionTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(16) };
+        m_positionTimer.Tick += UpdatePosition;
 
         Log.OnScreenLogMessage += OnScreenLogReceived;
 
@@ -79,92 +82,131 @@ public partial class OverlayWindow : System.Windows.Window
         Closing += OnClosing;
     }
 
+    /// <summary>
+    /// 窗口关闭事件处理
+    /// </summary>
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         e.Cancel = true;
         Detach();
     }
 
+    /// <summary>
+    /// 窗口加载完成事件处理
+    /// </summary>
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        _overlayHwnd = new WindowInteropHelper(this).Handle;
+        m_overlayHwnd = new WindowInteropHelper(this).Handle;
 
         var source = PresentationSource.FromVisual(this);
         if (source?.CompositionTarget != null)
-            _dpiScale = source.CompositionTarget.TransformToDevice.M11;
+        {
+            m_dpiScale = source.CompositionTarget.TransformToDevice.M11;
+        }
 
-        var exStyle = GetWindowLong(_overlayHwnd, GWL_EXSTYLE);
-        SetWindowLong(_overlayHwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+        var exStyle = GetWindowLong(m_overlayHwnd, GWL_EXSTYLE);
+        SetWindowLong(m_overlayHwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
     }
 
+    /// <summary>
+    /// 将覆盖层附加到目标窗口
+    /// </summary>
+    /// <param name="targetHwnd">目标窗口句柄</param>
     public void AttachTo(nint targetHwnd)
     {
-        _targetHwnd = targetHwnd;
+        m_targetHwnd = targetHwnd;
 
         var monitor = MonitorFromWindow(targetHwnd, 2);
         if (GetDpiForMonitor(monitor, 0, out uint dpiX, out _) == 0)
-            _dpiScale = dpiX / 96.0;
+        {
+            m_dpiScale = dpiX / 96.0;
+        }
 
         UpdateWindowPosition();
         Show();
-        _positionTimer.Start();
+        m_positionTimer.Start();
     }
 
+    /// <summary>
+    /// 从目标窗口分离覆盖层
+    /// </summary>
     public void Detach()
     {
-        if (_isPickingCoord) StopPickCoord();
-        if (_isScreenshotRegion) StopScreenshotRegion();
-        _positionTimer.Stop();
-        _targetHwnd = 0;
+        if (m_isPickingCoord)
+        {
+            StopPickCoord();
+        }
+        if (m_isScreenshotRegion)
+        {
+            StopScreenshotRegion();
+        }
+        m_positionTimer.Stop();
+        m_targetHwnd = 0;
         Hide();
         ClearInfo();
         ClearDrawings();
     }
 
+    /// <summary>
+    /// 强制关闭覆盖层窗口
+    /// </summary>
     public void ForceClose()
     {
         Log.OnScreenLogMessage -= OnScreenLogReceived;
-        _positionTimer.Stop();
+        m_positionTimer.Stop();
         Closing -= OnClosing;
         Close();
-        _instance = null;
+        s_instance = null;
     }
 
-    /// <summary>进入拾取/截图等需要接收鼠标的模式时，去掉透明与不激活，使覆盖层可点击。</summary>
+    /// <summary>
+    /// 进入拾取/截图等需要接收鼠标的模式时，去掉透明与不激活，使覆盖层可点击。
+    /// </summary>
+    /// <param name="receive">是否接收输入</param>
     private void SetOverlayReceivesInput(bool receive)
     {
-        if (_overlayHwnd == nint.Zero) return;
+        if (m_overlayHwnd == nint.Zero) return;
 
-        var exStyle = GetWindowLong(_overlayHwnd, GWL_EXSTYLE);
+        var exStyle = GetWindowLong(m_overlayHwnd, GWL_EXSTYLE);
         if (receive)
         {
             // 移除透明和不激活标志
-            _ = SetWindowLong(_overlayHwnd, GWL_EXSTYLE, exStyle & ~WS_EX_TRANSPARENT & ~WS_EX_NOACTIVATE);
+            _ = SetWindowLong(m_overlayHwnd, GWL_EXSTYLE, exStyle & ~WS_EX_TRANSPARENT & ~WS_EX_NOACTIVATE);
         }
         else
         {
             // 恢复透明和不激活标志
-            _ = SetWindowLong(_overlayHwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE);
+            _ = SetWindowLong(m_overlayHwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE);
         }
     }
 
-    /// <summary>将覆盖层窗口置于前台并激活，确保能收到鼠标键盘。</summary>
+    /// <summary>
+    /// 将覆盖层窗口置于前台并激活，确保能收到鼠标键盘。
+    /// </summary>
     private void BringOverlayToFront()
     {
-        if (_overlayHwnd == nint.Zero) return;
-        SetForegroundWindow(_overlayHwnd);
+        if (m_overlayHwnd == nint.Zero) return;
+        SetForegroundWindow(m_overlayHwnd);
     }
 
+    /// <summary>
+    /// 将目标窗口置于前台
+    /// </summary>
     private void BringTargetWindowToFront()
     {
-        if (_targetHwnd == 0) return;
+        if (m_targetHwnd == 0) return;
 
-        if (IsIconic(_targetHwnd))
-            ShowWindow(_targetHwnd, 9);
+        if (IsIconic(m_targetHwnd))
+        {
+            ShowWindow(m_targetHwnd, 9);
+        }
 
-        SetForegroundWindow(_targetHwnd);
+        SetForegroundWindow(m_targetHwnd);
     }
 
+    /// <summary>
+    /// 隐藏应用程序的其他窗口
+    /// </summary>
     private void HideAppWindow()
     {
         try
@@ -188,6 +230,9 @@ public partial class OverlayWindow : System.Windows.Window
         }
     }
 
+    /// <summary>
+    /// 显示应用程序的其他窗口
+    /// </summary>
     private void ShowAppWindow()
     {
         try
@@ -211,11 +256,14 @@ public partial class OverlayWindow : System.Windows.Window
         }
     }
 
+    /// <summary>
+    /// 定时器回调：更新窗口位置和十字线
+    /// </summary>
     private void UpdatePosition(object? sender, EventArgs e)
     {
-        if (_targetHwnd == 0) return;
+        if (m_targetHwnd == 0) return;
 
-        if (!IsWindow(_targetHwnd))
+        if (!IsWindow(m_targetHwnd))
         {
             Detach();
             return;
@@ -223,7 +271,7 @@ public partial class OverlayWindow : System.Windows.Window
 
         UpdateWindowPosition();
 
-        if (_isPickingCoord || _isScreenshotRegion)
+        if (m_isPickingCoord || m_isScreenshotRegion)
         {
             UpdateCrosshair();
             // 持续限制光标到窗口范围内，防止游戏鼠标出现
@@ -232,39 +280,49 @@ public partial class OverlayWindow : System.Windows.Window
         }
     }
 
+    /// <summary>
+    /// 更新覆盖层窗口位置以匹配目标窗口
+    /// </summary>
     private void UpdateWindowPosition()
     {
-        if (_targetHwnd == 0) return;
+        if (m_targetHwnd == 0) return;
 
-        if (GetClientRect(_targetHwnd, out var clientRect) &&
-                ClientToScreen(_targetHwnd, out var point))
+        if (GetClientRect(m_targetHwnd, out var clientRect) &&
+                ClientToScreen(m_targetHwnd, out var point))
         {
-            Left = point.X / _dpiScale;
-            Top = point.Y / _dpiScale;
-            Width = (clientRect.Right - clientRect.Left) / _dpiScale;
-            Height = (clientRect.Bottom - clientRect.Top) / _dpiScale;
+            Left = point.X / m_dpiScale;
+            Top = point.Y / m_dpiScale;
+            Width = (clientRect.Right - clientRect.Left) / m_dpiScale;
+            Height = (clientRect.Bottom - clientRect.Top) / m_dpiScale;
         }
     }
+
+    /// <summary>
+    /// 将光标限制在窗口范围内
+    /// </summary>
     private void ClipCursorToWindow()
     {
         var rect = new RECT {
-                Left = (int)(Left * _dpiScale),
-                Top = (int)(Top * _dpiScale),
-                Right = (int)((Left + Width) * _dpiScale),
-                Bottom = (int)((Top + Height) * _dpiScale)
+                Left = (int)(Left * m_dpiScale),
+                Top = (int)(Top * m_dpiScale),
+                Right = (int)((Left + Width) * m_dpiScale),
+                Bottom = (int)((Top + Height) * m_dpiScale)
         };
         ClipCursor(ref rect);
     }
 
+    /// <summary>
+    /// 更新十字线和坐标显示
+    /// </summary>
     private void UpdateCrosshair()
     {
         GetCursorPos(out var screenPos);
 
-        int physX = (int)(screenPos.X - Left * _dpiScale);
-        int physY = (int)(screenPos.Y - Top * _dpiScale);
+        int physX = (int)(screenPos.X - Left * m_dpiScale);
+        int physY = (int)(screenPos.Y - Top * m_dpiScale);
 
-        double logX = screenPos.X / _dpiScale - Left;
-        double logY = screenPos.Y / _dpiScale - Top;
+        double logX = screenPos.X / m_dpiScale - Left;
+        double logY = screenPos.Y / m_dpiScale - Top;
 
         CrosshairH.Y1 = logY;
         CrosshairH.Y2 = logY;
@@ -283,9 +341,13 @@ public partial class OverlayWindow : System.Windows.Window
         var panelSize = CoordPanel.DesiredSize;
 
         if (panelX + panelSize.Width > Width - 10)
+        {
             panelX = logX - panelSize.Width - 15;
+        }
         if (panelY + panelSize.Height > Height - 10)
+        {
             panelY = logY - panelSize.Height - 15;
+        }
 
         Canvas.SetLeft(CoordPanel, Math.Max(5, panelX));
         Canvas.SetTop(CoordPanel, Math.Max(5, panelY));
@@ -293,6 +355,12 @@ public partial class OverlayWindow : System.Windows.Window
 
 #region 信息显示
 
+    /// <summary>
+    /// 显示信息项
+    /// </summary>
+    /// <param name="key">信息项的唯一标识</param>
+    /// <param name="text">显示的文本</param>
+    /// <param name="foreground">前景色，为null时使用默认白色</param>
     public void ShowInfo(string key, string text, Brush? foreground = null)
     {
         Dispatcher.Invoke(() =>
@@ -324,6 +392,10 @@ public partial class OverlayWindow : System.Windows.Window
         });
     }
 
+    /// <summary>
+    /// 隐藏指定信息项
+    /// </summary>
+    /// <param name="key">信息项的唯一标识</param>
     public void HideInfo(string key)
     {
         Dispatcher.Invoke(() =>
@@ -331,10 +403,15 @@ public partial class OverlayWindow : System.Windows.Window
             var existing = InfoPanel.Children.OfType<Border>()
                     .FirstOrDefault(b => b.Tag?.ToString() == key);
             if (existing != null)
+            {
                 InfoPanel.Children.Remove(existing);
+            }
         });
     }
 
+    /// <summary>
+    /// 清除所有信息项
+    /// </summary>
     public void ClearInfo()
     {
         Dispatcher.Invoke(() => InfoPanel.Children.Clear());
@@ -344,12 +421,16 @@ public partial class OverlayWindow : System.Windows.Window
 
 #region 日志
 
-    /// <summary>从任意线程接收屏幕日志事件，过滤后投递到 UI 线程</summary>
+    /// <summary>
+    /// 从任意线程接收屏幕日志事件，过滤后投递到 UI 线程
+    /// </summary>
+    /// <param name="level">日志级别</param>
+    /// <param name="message">日志消息</param>
     private void OnScreenLogReceived(string level, string message)
     {
         // 级别过滤
-        if (!LevelPriority.TryGetValue(level, out var msgPriority)) return;
-        if (!LevelPriority.TryGetValue(_logMinLevel, out var minPriority)) return;
+        if (!s_levelPriority.TryGetValue(level, out var msgPriority)) return;
+        if (!s_levelPriority.TryGetValue(m_logMinLevel, out var minPriority)) return;
         if (msgPriority < minPriority) return;
 
         // 面板不可见时不渲染（节省资源）
@@ -358,9 +439,14 @@ public partial class OverlayWindow : System.Windows.Window
         Dispatcher.BeginInvoke(DispatcherPriority.Background, () => AppendLogLine(level, message));
     }
 
+    /// <summary>
+    /// 追加一行日志到显示面板
+    /// </summary>
+    /// <param name="level">日志级别</param>
+    /// <param name="message">日志消息</param>
     private void AppendLogLine(string level, string message)
     {
-        var color = LevelColor.GetValueOrDefault(level, LevelColor["INF"]);
+        var color = s_levelColor.GetValueOrDefault(level, s_levelColor["INF"]);
 
         var line = new TextBlock {
                 FontFamily = new FontFamily("Consolas"),
@@ -376,7 +462,9 @@ public partial class OverlayWindow : System.Windows.Window
 
         // 超出最大行数时从顶部移除旧行
         while (LogLines.Children.Count > MaxLogLines)
+        {
             LogLines.Children.RemoveAt(0);
+        }
     }
 
 #endregion
@@ -386,13 +474,20 @@ public partial class OverlayWindow : System.Windows.Window
     /// <summary>
     /// 绘制点击标记
     /// </summary>
+    /// <summary>
+    /// 绘制点击标记
+    /// </summary>
+    /// <param name="x">X坐标（物理像素）</param>
+    /// <param name="y">Y坐标（物理像素）</param>
+    /// <param name="success">是否成功</param>
+    /// <param name="duration">显示时长（毫秒）</param>
     public void DrawClickMarker(int x, int y, bool success, int duration = 2000)
     {
         Brush color = success ? Brushes.LawnGreen : Brushes.Red;
         Dispatcher.Invoke(() =>
         {
-            double logX = x / _dpiScale;
-            double logY = y / _dpiScale;
+            double logX = x / m_dpiScale;
+            double logY = y / m_dpiScale;
 
             // 十字标记
             var cross = new Canvas { Tag = "click" };
@@ -430,6 +525,12 @@ public partial class OverlayWindow : System.Windows.Window
     /// <summary>
     /// 绘制 OCR 结果矩形和文字
     /// </summary>
+    /// <summary>
+    /// 绘制 OCR 结果矩形和文字
+    /// </summary>
+    /// <param name="roi">ROI区域</param>
+    /// <param name="results">OCR识别结果列表</param>
+    /// <param name="duration">显示时长（毫秒）</param>
     public void DrawOcrResult(OpenCvSharp.Rect roi, List<(OpenCvSharp.Rect box, string text)> results, int duration = 3000)
     {
         Dispatcher.Invoke(() =>
@@ -437,10 +538,10 @@ public partial class OverlayWindow : System.Windows.Window
             var container = new Canvas { Tag = "ocr" };
 
             // 绘制 ROI 区域
-            double roiX = roi.X / _dpiScale;
-            double roiY = roi.Y / _dpiScale;
-            double roiW = roi.Width / _dpiScale;
-            double roiH = roi.Height / _dpiScale;
+            double roiX = roi.X / m_dpiScale;
+            double roiY = roi.Y / m_dpiScale;
+            double roiW = roi.Width / m_dpiScale;
+            double roiH = roi.Height / m_dpiScale;
 
             var roiRect = new Rectangle {
                     Width = roiW, Height = roiH,
@@ -454,10 +555,10 @@ public partial class OverlayWindow : System.Windows.Window
             // 绘制每个识别结果
             foreach (var (box, text) in results)
             {
-                double bx = (roi.X + box.X) / _dpiScale;
-                double by = (roi.Y + box.Y) / _dpiScale;
-                double bw = box.Width / _dpiScale;
-                double bh = box.Height / _dpiScale;
+                double bx = (roi.X + box.X) / m_dpiScale;
+                double by = (roi.Y + box.Y) / m_dpiScale;
+                double bw = box.Width / m_dpiScale;
+                double bh = box.Height / m_dpiScale;
 
                 // 文字框
                 var rect = new Rectangle {
@@ -511,10 +612,14 @@ public partial class OverlayWindow : System.Windows.Window
 
 #region 坐标拾取
 
+    /// <summary>
+    /// 开始坐标拾取模式
+    /// </summary>
+    /// <param name="onPicked">坐标拾取完成时的回调函数，参数为 (x, y) 物理像素坐标</param>
     public void StartPickCoord(Action<int, int> onPicked)
     {
-        _onCoordPicked = onPicked;
-        _isPickingCoord = true;
+        m_onCoordPicked = onPicked;
+        m_isPickingCoord = true;
 
         HideAppWindow();
         SetOverlayReceivesInput(true);
@@ -539,10 +644,13 @@ public partial class OverlayWindow : System.Windows.Window
         Focus();
     }
 
+    /// <summary>
+    /// 停止坐标拾取模式
+    /// </summary>
     public void StopPickCoord()
     {
-        _isPickingCoord = false;
-        _onCoordPicked = null;
+        m_isPickingCoord = false;
+        m_onCoordPicked = null;
 
         ShowAppWindow();
         SetOverlayReceivesInput(false);
@@ -560,24 +668,34 @@ public partial class OverlayWindow : System.Windows.Window
         KeyDown -= OnPickKeyDown;
     }
 
-
+    /// <summary>
+    /// 坐标拾取模式下的鼠标移动事件处理
+    /// </summary>
     private void OnPickMouseMove(object sender, MouseEventArgs e) { }
 
+    /// <summary>
+    /// 坐标拾取模式下的鼠标点击事件处理
+    /// </summary>
     private void OnPickMouseClick(object sender, MouseButtonEventArgs e)
     {
         GetCursorPos(out var screenPos);
-        int x = (int)(screenPos.X - Left * _dpiScale);
-        int y = (int)(screenPos.Y - Top * _dpiScale);
+        int x = (int)(screenPos.X - Left * m_dpiScale);
+        int y = (int)(screenPos.Y - Top * m_dpiScale);
 
-        var callback = _onCoordPicked;
+        var callback = m_onCoordPicked;
         StopPickCoord();
         callback?.Invoke(x, y);
     }
 
+    /// <summary>
+    /// 坐标拾取模式下的键盘事件处理
+    /// </summary>
     private void OnPickKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
+        {
             StopPickCoord();
+        }
     }
 
 #endregion
@@ -587,10 +705,14 @@ public partial class OverlayWindow : System.Windows.Window
     /// <summary>
     /// 在目标窗口上拖拽框选区域，完成后回调 (x, y, width, height) 客户区坐标；取消时 (0,0,0,0)。
     /// </summary>
+    /// <summary>
+    /// 开始截图框选模式
+    /// </summary>
+    /// <param name="onComplete">框选完成时的回调函数，参数为 (x, y, width, height) 物理像素坐标；取消时为 (0,0,0,0)</param>
     public void StartScreenshotRegion(Action<int, int, int, int> onComplete)
     {
-        _onScreenshotRegionComplete = onComplete;
-        _isScreenshotRegion = true;
+        m_onScreenshotRegionComplete = onComplete;
+        m_isScreenshotRegion = true;
 
         HideAppWindow();
         SetOverlayReceivesInput(true);
@@ -618,10 +740,13 @@ public partial class OverlayWindow : System.Windows.Window
         Focus();
     }
 
+    /// <summary>
+    /// 停止截图框选模式
+    /// </summary>
     public void StopScreenshotRegion()
     {
-        _isScreenshotRegion = false;
-        _onScreenshotRegionComplete = null;
+        m_isScreenshotRegion = false;
+        m_onScreenshotRegionComplete = null;
 
         ShowAppWindow();
         SetOverlayReceivesInput(false);
@@ -638,25 +763,31 @@ public partial class OverlayWindow : System.Windows.Window
         KeyDown -= OnScreenshotKeyDown;
     }
 
+    /// <summary>
+    /// 截图框选模式下的鼠标按下事件处理
+    /// </summary>
     private void OnScreenshotMouseDown(object sender, MouseButtonEventArgs e)
     {
         var pos = e.GetPosition(this);
-        _screenshotStart = pos;
+        m_screenshotStart = pos;
         Canvas.SetLeft(ScreenshotRect, pos.X);
         Canvas.SetTop(ScreenshotRect, pos.Y);
         ScreenshotRect.Width = 0;
         ScreenshotRect.Height = 0;
     }
 
+    /// <summary>
+    /// 截图框选模式下的鼠标移动事件处理
+    /// </summary>
     private void OnScreenshotMouseMove(object sender, MouseEventArgs e)
     {
         if (e.LeftButton != MouseButtonState.Pressed) return;
 
         var pos = e.GetPosition(this);
-        double x = Math.Min(_screenshotStart.X, pos.X);
-        double y = Math.Min(_screenshotStart.Y, pos.Y);
-        double w = Math.Abs(pos.X - _screenshotStart.X);
-        double h = Math.Abs(pos.Y - _screenshotStart.Y);
+        double x = Math.Min(m_screenshotStart.X, pos.X);
+        double y = Math.Min(m_screenshotStart.Y, pos.Y);
+        double w = Math.Abs(pos.X - m_screenshotStart.X);
+        double h = Math.Abs(pos.Y - m_screenshotStart.Y);
 
         Canvas.SetLeft(ScreenshotRect, x);
         Canvas.SetTop(ScreenshotRect, y);
@@ -664,31 +795,41 @@ public partial class OverlayWindow : System.Windows.Window
         ScreenshotRect.Height = h;
     }
 
+    /// <summary>
+    /// 截图框选模式下的鼠标释放事件处理
+    /// </summary>
     private void OnScreenshotMouseUp(object sender, MouseButtonEventArgs e)
     {
         var pos = e.GetPosition(this);
-        int x1 = (int)(Math.Min(_screenshotStart.X, pos.X) * _dpiScale);
-        int y1 = (int)(Math.Min(_screenshotStart.Y, pos.Y) * _dpiScale);
-        int x2 = (int)(Math.Max(_screenshotStart.X, pos.X) * _dpiScale);
-        int y2 = (int)(Math.Max(_screenshotStart.Y, pos.Y) * _dpiScale);
+        int x1 = (int)(Math.Min(m_screenshotStart.X, pos.X) * m_dpiScale);
+        int y1 = (int)(Math.Min(m_screenshotStart.Y, pos.Y) * m_dpiScale);
+        int x2 = (int)(Math.Max(m_screenshotStart.X, pos.X) * m_dpiScale);
+        int y2 = (int)(Math.Max(m_screenshotStart.Y, pos.Y) * m_dpiScale);
 
         int w = x2 - x1;
         int h = y2 - y1;
 
-        var callback = _onScreenshotRegionComplete;
+        var callback = m_onScreenshotRegionComplete;
         StopScreenshotRegion();
 
         if (w >= 5 && h >= 5)
+        {
             callback?.Invoke(x1, y1, w, h);
+        }
         else
+        {
             callback?.Invoke(0, 0, 0, 0);
+        }
     }
 
+    /// <summary>
+    /// 截图框选模式下的键盘事件处理
+    /// </summary>
     private void OnScreenshotKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
         {
-            var cb = _onScreenshotRegionComplete;
+            var cb = m_onScreenshotRegionComplete;
             StopScreenshotRegion();
             cb?.Invoke(0, 0, 0, 0);
         }

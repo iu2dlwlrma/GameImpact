@@ -122,16 +122,22 @@ public static class Direct3D11Helper
     public static bool FillMat(this Texture2D staging, Device device, Texture2D source, Mat destMat, ResourceRegion? region = null)
     {
         if (device.IsDisposed || device.DeviceRemovedReason.Code != 0)
+        {
             return false;
+        }
 
         try
         {
             var ctx = device.ImmediateContext;
 
             if (region != null)
+            {
                 ctx.CopySubresourceRegion(source, 0, region, staging, 0, 0, 0, 0);
+            }
             else
+            {
                 ctx.CopyResource(staging, source);
+            }
 
             var dataBox = ctx.MapSubresource(staging, 0, MapMode.Read, SharpDX.Direct3D11.MapFlags.None);
             try
@@ -140,9 +146,13 @@ public static class Direct3D11Helper
                 int h = staging.Description.Height;
 
                 if (staging.Description.Format == Format.R16G16B16A16_Float)
+                {
                     ConvertHdrToBgra(dataBox, destMat, w, h);
+                }
                 else
+                {
                     CopyBgra(dataBox, destMat, w, h);
+                }
 
                 return true;
             }

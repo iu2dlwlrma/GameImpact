@@ -8,17 +8,23 @@ using ModifierKeys = GameImpact.Abstractions.Hotkey.ModifierKeys;
 
 namespace GameImpact.Hotkey;
 
+/// <summary>
+/// 全局热键服务实现
+/// </summary>
 public class HotkeyService : IHotkeyService
 {
     public event EventHandler<HotkeyEventArgs>? HotkeyPressed;
 
-    private readonly HotkeyWindow _window;
-    private int _currentId;
+    private readonly HotkeyWindow m_window;
+    private int m_currentId;
 
+    /// <summary>
+    /// 构造函数
+    /// </summary>
     public HotkeyService()
     {
-        _window = new HotkeyWindow();
-        _window.HotkeyPressed += (_, e) =>
+        m_window = new HotkeyWindow();
+        m_window.HotkeyPressed += (_, e) =>
         {
             Log.Debug("[Hotkey] Pressed: {Modifiers}+{Key}", e.Modifiers, e.Key);
             HotkeyPressed?.Invoke(this, e);
@@ -26,11 +32,12 @@ public class HotkeyService : IHotkeyService
         Log.Debug("[Hotkey] Service initialized");
     }
 
+    /// <inheritdoc/>
     public int Register(ModifierKeys modifiers, Keys key)
     {
-        _currentId++;
+        m_currentId++;
         var mod = ToNativeModifiers(modifiers);
-        if (!User32.RegisterHotKey(_window.Handle, _currentId, mod, (uint)key))
+        if (!User32.RegisterHotKey(m_window.Handle, m_currentId, mod, (uint)key))
         {
             var error = Marshal.GetLastWin32Error();
             Log.Error("[Hotkey] Registration failed: {Modifiers}+{Key}, error={Error}", modifiers, key, error);
@@ -38,27 +45,32 @@ public class HotkeyService : IHotkeyService
                 ? "Hotkey already registered"
                 : $"Hotkey registration failed: {error}");
         }
-        Log.Info("[Hotkey] Registered: {Modifiers}+{Key}, id={Id}", modifiers, key, _currentId);
-        return _currentId;
+        Log.Info("[Hotkey] Registered: {Modifiers}+{Key}, id={Id}", modifiers, key, m_currentId);
+        return m_currentId;
     }
 
+    /// <inheritdoc/>
     public void Unregister(int hotkeyId)
     {
         Log.Debug("[Hotkey] Unregistering id={Id}", hotkeyId);
-        User32.UnregisterHotKey(_window.Handle, hotkeyId);
+        User32.UnregisterHotKey(m_window.Handle, hotkeyId);
     }
 
+    /// <inheritdoc/>
     public void UnregisterAll()
     {
-        Log.Debug("[Hotkey] Unregistering all ({Count} hotkeys)", _currentId);
-        for (var i = _currentId; i > 0; i--)
-            User32.UnregisterHotKey(_window.Handle, i);
+        Log.Debug("[Hotkey] Unregistering all ({Count} hotkeys)", m_currentId);
+        for (var i = m_currentId; i > 0; i--)
+        {
+            User32.UnregisterHotKey(m_window.Handle, i);
+        }
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         UnregisterAll();
-        _window.Dispose();
+        m_window.Dispose();
         Log.Debug("[Hotkey] Service disposed");
         GC.SuppressFinalize(this);
     }

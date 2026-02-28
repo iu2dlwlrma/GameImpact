@@ -4,8 +4,12 @@ using OpenCvSharp;
 
 namespace GameImpact.Recognition;
 
+/// <summary>
+/// 图像识别服务实现，提供模板匹配和颜色匹配功能
+/// </summary>
 public class RecognitionService : IRecognitionService
 {
+    /// <inheritdoc/>
     public TemplateMatchResult MatchTemplate(Mat source, Mat template, MatchOptions? options = null)
     {
         options ??= new MatchOptions();
@@ -70,6 +74,7 @@ public class RecognitionService : IRecognitionService
         );
     }
 
+    /// <inheritdoc/>
     public List<TemplateMatchResult> MatchTemplateAll(Mat source, Mat template, MatchOptions? options = null)
     {
         options ??= new MatchOptions();
@@ -119,6 +124,7 @@ public class RecognitionService : IRecognitionService
         return results;
     }
 
+    /// <inheritdoc/>
     public ColorMatchResult MatchColor(Mat image, ColorRange range, Rect? roi = null)
     {
         Log.Debug("[Recognition] MatchColor: image={W}x{H}", image.Width, image.Height);

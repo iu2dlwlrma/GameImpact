@@ -9,16 +9,23 @@
     <SolidColorBrush x:Key="AppBackground" Color="{StaticResource Light.Background}"/>
     <SolidColorBrush x:Key="AppSurface" Color="{StaticResource Light.Surface}"/>
     <SolidColorBrush x:Key="AppSurfaceVariant" Color="{StaticResource Light.SurfaceVariant}"/>
+    <SolidColorBrush x:Key="AppSurfaceHover" Color="{StaticResource Light.SurfaceHover}"/>
     <SolidColorBrush x:Key="AppBorder" Color="{StaticResource Light.Border}"/>
     <SolidColorBrush x:Key="AppBorderSubtle" Color="{StaticResource Light.BorderSubtle}"/>
+    <SolidColorBrush x:Key="AppBorderHover" Color="{StaticResource Light.BorderHover}"/>
     <SolidColorBrush x:Key="AppText" Color="{StaticResource Light.Text}"/>
     <SolidColorBrush x:Key="AppTextSecondary" Color="{StaticResource Light.TextSecondary}"/>
     <SolidColorBrush x:Key="AppTextMuted" Color="{StaticResource Light.TextMuted}"/>
     <SolidColorBrush x:Key="AppAccent" Color="{StaticResource Light.Accent}"/>
     <SolidColorBrush x:Key="AppAccentHover" Color="{StaticResource Light.AccentHover}"/>
+    <SolidColorBrush x:Key="AppAccentLight" Color="{StaticResource Light.AccentLight}"/>
+    <SolidColorBrush x:Key="AppAccentDark" Color="{StaticResource Light.AccentDark}"/>
     <SolidColorBrush x:Key="AppSuccess" Color="{StaticResource Light.Success}"/>
+    <SolidColorBrush x:Key="AppSuccessHover" Color="{StaticResource Light.SuccessHover}"/>
     <SolidColorBrush x:Key="AppWarning" Color="{StaticResource Light.Warning}"/>
+    <SolidColorBrush x:Key="AppWarningHover" Color="{StaticResource Light.WarningHover}"/>
     <SolidColorBrush x:Key="AppError" Color="{StaticResource Light.Error}"/>
+    <SolidColorBrush x:Key="AppErrorHover" Color="{StaticResource Light.ErrorHover}"/>
     
     <!-- 按钮样式 -->
     <Style x:Key="AccentButton" TargetType="Button">
@@ -201,11 +208,38 @@
                             </Grid>
                         </Border>
 
+                        <ToggleButton x:Name="PART_ToggleButton"
+                                       Background="Transparent"
+                                       BorderThickness="0"
+                                       Focusable="False"
+                                       HorizontalAlignment="Stretch"
+                                       VerticalAlignment="Stretch"
+                                       ClickMode="Press"
+                                       OverridesDefaultStyle="True"
+                                       IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}">
+                            <ToggleButton.Style>
+                                <Style TargetType="ToggleButton">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ToggleButton">
+                                                <Border Background="Transparent"
+                                                        BorderThickness="0">
+                                                    <ContentPresenter HorizontalAlignment="Stretch"
+                                                                      VerticalAlignment="Stretch" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ToggleButton.Style>
+                        </ToggleButton>
+
                         <Popup x:Name="PART_Popup"
                                AllowsTransparency="True"
                                Focusable="False"
                                PopupAnimation="Slide"
                                Placement="Bottom"
+                               PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
                                IsOpen="{TemplateBinding IsDropDownOpen}">
                             <Border x:Name="DropDownBorder"
                                     Margin="0,4,0,0"
@@ -338,8 +372,8 @@
                                     <Thumb.Template>
                                         <ControlTemplate TargetType="Thumb">
                                             <Border Background="{StaticResource AppAccent}"
-                                                    BorderBrush="{TemplateBinding Foreground}"
-                                                    BorderThickness="2"
+                                                    BorderBrush="{StaticResource AppAccent}"
+                                                    BorderThickness="0"
                                                     CornerRadius="9"
                                                     Width="{TemplateBinding Width}"
                                                     Height="{TemplateBinding Height}">
@@ -349,7 +383,7 @@
                                                         <VisualState x:Name="MouseOver">
                                                             <Storyboard>
                                                                 <ColorAnimation Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                                                To="{StaticResource Light.SurfaceVariant}" Duration="0:0:0.1"/>
+                                                                                To="{StaticResource Light.AccentLight}" Duration="0:0:0.1"/>
                                                             </Storyboard>
                                                         </VisualState>
                                                         <VisualState x:Name="Pressed">

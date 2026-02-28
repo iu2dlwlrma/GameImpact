@@ -16,75 +16,88 @@ namespace GameImpact.Capture;
 public class GraphicsCapture : IScreenCapture
 {
     public bool IsCapturing { get; private set; }
-    public int FrameCount => _frameCount;
+    public int FrameCount => m_frameCount;
 
-    private readonly bool _enableHdr;
-    private readonly bool _useGpuHdrConversion;
-    private nint _hWnd;
-    private Direct3D11CaptureFramePool? _framePool;
-    private GraphicsCaptureItem? _captureItem;
-    private GraphicsCaptureSession? _session;
-    private IDirect3DDevice? _d3dDevice;
-    private Device? _sharpDxDevice;
-    private DirectXPixelFormat _pixelFormat;
-    private GpuHdrConverter? _hdrConverter;
+    private readonly bool m_enableHdr;
+    private readonly bool m_useGpuHdrConversion;
+    private nint m_hWnd;
+    private Direct3D11CaptureFramePool? m_framePool;
+    private GraphicsCaptureItem? m_captureItem;
+    private GraphicsCaptureSession? m_session;
+    private IDirect3DDevice? m_d3dDevice;
+    private Device? m_sharpDxDevice;
+    private DirectXPixelFormat m_pixelFormat;
+    private GpuHdrConverter? m_hdrConverter;
     
-    private Mat?[] _buffers = new Mat?[3];
-    private volatile int _writeIndex;
-    private volatile int _readyIndex = -1;
-    private volatile int _readIndex = -1;
+    private Mat?[] m_buffers = new Mat?[3];
+    private volatile int m_writeIndex;
+    private volatile int m_readyIndex = -1;
+    private volatile int m_readIndex = -1;
     
-    private Texture2D? _stagingTexture;
-    private int _surfaceWidth, _surfaceHeight;
-    private ResourceRegion? _region;
-    private volatile int _frameCount;
-    private volatile bool _isProcessing;
+    private Texture2D? m_stagingTexture;
+    private int m_surfaceWidth, m_surfaceHeight;
+    private ResourceRegion? m_region;
+    private volatile int m_frameCount;
+    private volatile bool m_isProcessing;
 
     /// <summary>
     /// 创建 GraphicsCapture 实例
     /// </summary>
+    /// <summary>
+    /// 创建 GraphicsCapture 实例
+    /// </summary>
+    /// <param name="enableHdr">是否启用HDR</param>
+    /// <param name="useGpuHdrConversion">是否使用GPU进行HDR转换</param>
     public GraphicsCapture(bool enableHdr = false, bool useGpuHdrConversion = false)
     {
-        _enableHdr = enableHdr;
-        _useGpuHdrConversion = useGpuHdrConversion;
+        m_enableHdr = enableHdr;
+        m_useGpuHdrConversion = useGpuHdrConversion;
     }
 
     /// <summary>
     /// 开始捕获指定窗口
     /// </summary>
+    /// <param name="windowHandle">目标窗口句柄</param>
+    /// <param name="options">捕获选项</param>
     public void Start(nint windowHandle, CaptureOptions? options = null)
     {
-        _hWnd = windowHandle;
-        _region = GetGameScreenRegion(windowHandle);
+        m_hWnd = windowHandle;
+        m_region = GetGameScreenRegion(windowHandle);
         IsCapturing = true;
-        _frameCount = 0;
+        m_frameCount = 0;
 
-        _captureItem = CaptureHelper.CreateItemForWindow(_hWnd);
-        if (_captureItem == null)
+        m_captureItem = CaptureHelper.CreateItemForWindow(m_hWnd);
+        if (m_captureItem == null)
+        {
             throw new InvalidOperationException("Failed to create capture item");
+        }
 
-        _surfaceWidth = _captureItem.Size.Width;
-        _surfaceHeight = _captureItem.Size.Height;
-        _d3dDevice = Direct3D11Helper.CreateDevice();
+        m_surfaceWidth = m_captureItem.Size.Width;
+        m_surfaceHeight = m_captureItem.Size.Height;
+        m_d3dDevice = Direct3D11Helper.CreateDevice();
 
-        _pixelFormat = _enableHdr 
+        m_pixelFormat = m_enableHdr 
             ? DirectXPixelFormat.R16G16B16A16Float 
             : DirectXPixelFormat.B8G8R8A8UIntNormalized;
         
-        _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(_d3dDevice, _pixelFormat, 3, _captureItem.Size);
-        _captureItem.Closed += (_, _) => Stop();
-        _framePool.FrameArrived += OnFrameArrived;
+        m_framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(m_d3dDevice, m_pixelFormat, 3, m_captureItem.Size);
+        m_captureItem.Closed += (_, _) => Stop();
+        m_framePool.FrameArrived += OnFrameArrived;
 
-        _session = _framePool.CreateCaptureSession(_captureItem);
+        m_session = m_framePool.CreateCaptureSession(m_captureItem);
         
         if (ApiInformation.IsPropertyPresent("Windows.Graphics.Capture.GraphicsCaptureSession", "IsCursorCaptureEnabled"))
-            _session.IsCursorCaptureEnabled = false;
+        {
+            m_session.IsCursorCaptureEnabled = false;
+        }
         
         if (ApiInformation.IsWriteablePropertyPresent("Windows.Graphics.Capture.GraphicsCaptureSession", "IsBorderRequired"))
-            _session.IsBorderRequired = false;
+        {
+            m_session.IsBorderRequired = false;
+        }
 
-        _session.StartCapture();
-        Log.Info("[GraphicsCapture] Started (HDR: {Hdr}, GPU: {Gpu})", _enableHdr, _useGpuHdrConversion);
+        m_session.StartCapture();
+        Log.Info("[GraphicsCapture] Started (HDR: {Hdr}, GPU: {Gpu})", m_enableHdr, m_useGpuHdrConversion);
     }
 
     /// <summary>
@@ -92,11 +105,14 @@ public class GraphicsCapture : IScreenCapture
     /// </summary>
     public Mat? Capture()
     {
-        int ready = _readyIndex;
-        if (ready < 0) return null;
+        int ready = m_readyIndex;
+        if (ready < 0)
+        {
+            return null;
+        }
         
-        _readIndex = ready;
-        var mat = _buffers[ready];
+        m_readIndex = ready;
+        var mat = m_buffers[ready];
         if (mat == null || mat.IsDisposed) return null;
         
         return mat.Clone();
@@ -107,15 +123,15 @@ public class GraphicsCapture : IScreenCapture
     /// </summary>
     public bool TryGetFrameData(out nint data, out int width, out int height, out int step)
     {
-        int ready = _readyIndex;
-        if (ready < 0 || _buffers[ready] == null)
+        int ready = m_readyIndex;
+        if (ready < 0 || m_buffers[ready] == null)
         {
             data = 0; width = height = step = 0;
             return false;
         }
         
-        _readIndex = ready;
-        var mat = _buffers[ready]!;
+        m_readIndex = ready;
+        var mat = m_buffers[ready]!;
         data = mat.Data;
         width = mat.Width;
         height = mat.Height;
@@ -126,7 +142,7 @@ public class GraphicsCapture : IScreenCapture
     /// <summary>
     /// 释放当前读取的帧
     /// </summary>
-    public void ReleaseFrame() => _readIndex = -1;
+    public void ReleaseFrame() => m_readIndex = -1;
 
     /// <summary>
     /// 停止捕获并释放资源
@@ -136,38 +152,38 @@ public class GraphicsCapture : IScreenCapture
         if (!IsCapturing) return;
         IsCapturing = false;
         
-        SpinWait.SpinUntil(() => !_isProcessing, 100);
+        SpinWait.SpinUntil(() => !m_isProcessing, 100);
         
-        try { _session?.Dispose(); } catch { }
-        _session = null;
+        try { m_session?.Dispose(); } catch { }
+        m_session = null;
         
-        if (_framePool != null)
+        if (m_framePool != null)
         {
-            _framePool.FrameArrived -= OnFrameArrived;
-            try { _framePool.Dispose(); } catch { }
-            _framePool = null;
+            m_framePool.FrameArrived -= OnFrameArrived;
+            try { m_framePool.Dispose(); } catch { }
+            m_framePool = null;
         }
         
-        _captureItem = null;
-        try { _stagingTexture?.Dispose(); } catch { }
-        _stagingTexture = null;
-        try { _hdrConverter?.Dispose(); } catch { }
-        _hdrConverter = null;
-        _sharpDxDevice = null;
-        try { _d3dDevice?.Dispose(); } catch { }
-        _d3dDevice = null;
+        m_captureItem = null;
+        try { m_stagingTexture?.Dispose(); } catch { }
+        m_stagingTexture = null;
+        try { m_hdrConverter?.Dispose(); } catch { }
+        m_hdrConverter = null;
+        m_sharpDxDevice = null;
+        try { m_d3dDevice?.Dispose(); } catch { }
+        m_d3dDevice = null;
         
-        for (int i = 0; i < _buffers.Length; i++)
+        for (int i = 0; i < m_buffers.Length; i++)
         {
-            try { _buffers[i]?.Dispose(); } catch { }
-            _buffers[i] = null;
+            try { m_buffers[i]?.Dispose(); } catch { }
+            m_buffers[i] = null;
         }
-        _readyIndex = -1;
-        _readIndex = -1;
-        _writeIndex = 0;
-        _hWnd = 0;
+        m_readyIndex = -1;
+        m_readIndex = -1;
+        m_writeIndex = 0;
+        m_hWnd = 0;
         
-        Log.Info("[GraphicsCapture] Stopped (frames: {Count})", _frameCount);
+        Log.Info("[GraphicsCapture] Stopped (frames: {Count})", m_frameCount);
     }
 
     public void Dispose()
@@ -178,58 +194,69 @@ public class GraphicsCapture : IScreenCapture
 
     private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
     {
-        if (!IsCapturing || _hWnd == 0) return;
-        if (_isProcessing) return;
-        _isProcessing = true;
+        if (!IsCapturing || m_hWnd == 0)
+        {
+            return;
+        }
+        if (m_isProcessing)
+        {
+            return;
+        }
+        m_isProcessing = true;
         
         try
         {
             using var frame = sender.TryGetNextFrame();
-            if (frame == null || !IsCapturing) return;
+            if (frame == null || !IsCapturing)
+            {
+                return;
+            }
 
-            _sharpDxDevice ??= Direct3D11Helper.SharedDevice;
-            if (_sharpDxDevice == null || _sharpDxDevice.IsDisposed)
+            m_sharpDxDevice ??= Direct3D11Helper.SharedDevice;
+            if (m_sharpDxDevice == null || m_sharpDxDevice.IsDisposed)
             {
                 Log.Error("[GraphicsCapture] SharedDevice unavailable");
                 IsCapturing = false;
                 return;
             }
 
-            if (_sharpDxDevice.DeviceRemovedReason.Code != 0)
+            if (m_sharpDxDevice.DeviceRemovedReason.Code != 0)
             {
-                Log.Error("[GraphicsCapture] GPU device removed: 0x{Code:X}", _sharpDxDevice.DeviceRemovedReason.Code);
+                Log.Error("[GraphicsCapture] GPU device removed: 0x{Code:X}", m_sharpDxDevice.DeviceRemovedReason.Code);
                 IsCapturing = false;
                 return;
             }
 
-            var captureSize = _captureItem!.Size;
-            if (captureSize.Width != _surfaceWidth || captureSize.Height != _surfaceHeight)
+            var captureSize = m_captureItem!.Size;
+            if (captureSize.Width != m_surfaceWidth || captureSize.Height != m_surfaceHeight)
             {
-                _framePool!.Recreate(_d3dDevice, _pixelFormat, 3, captureSize);
-                _stagingTexture?.Dispose();
-                _stagingTexture = null;
-                _surfaceWidth = captureSize.Width;
-                _surfaceHeight = captureSize.Height;
-                _region = GetGameScreenRegion(_hWnd);
+                m_framePool!.Recreate(m_d3dDevice, m_pixelFormat, 3, captureSize);
+                m_stagingTexture?.Dispose();
+                m_stagingTexture = null;
+                m_surfaceWidth = captureSize.Width;
+                m_surfaceHeight = captureSize.Height;
+                m_region = GetGameScreenRegion(m_hWnd);
                 return;
             }
 
             using var surfaceTexture = Direct3D11Helper.CreateSharpDXTexture2D(frame.Surface);
             
             Texture2D textureToRead = surfaceTexture;
-            if (_enableHdr && _useGpuHdrConversion)
+            if (m_enableHdr && m_useGpuHdrConversion)
             {
-                _hdrConverter ??= new GpuHdrConverter(_sharpDxDevice);
-                var converted = _hdrConverter.Convert(surfaceTexture);
+                m_hdrConverter ??= new GpuHdrConverter(m_sharpDxDevice);
+                var converted = m_hdrConverter.Convert(surfaceTexture);
                 if (converted != null)
+                {
                     textureToRead = converted;
+                }
             }
 
             int targetW, targetH;
-            if (_region != null)
+            if (m_region != null)
             {
-                targetW = _region.Value.Right - _region.Value.Left;
-                targetH = _region.Value.Bottom - _region.Value.Top;
+                targetW = m_region.Value.Right - m_region.Value.Left;
+                targetH = m_region.Value.Bottom - m_region.Value.Top;
             }
             else
             {
@@ -238,44 +265,53 @@ public class GraphicsCapture : IScreenCapture
             }
 
             if (targetW <= 0 || targetH <= 0 || targetW > 8192 || targetH > 8192)
-                return;
-
-            var texDesc = textureToRead.Description;
-            int stagingW = _region != null ? targetW : texDesc.Width;
-            int stagingH = _region != null ? targetH : texDesc.Height;
-            
-            if (_stagingTexture == null || 
-                _stagingTexture.Description.Width != stagingW ||
-                _stagingTexture.Description.Height != stagingH ||
-                _stagingTexture.Description.Format != texDesc.Format)
             {
-                _stagingTexture?.Dispose();
-                _stagingTexture = Direct3D11Helper.CreateStagingTexture(
-                    _sharpDxDevice, stagingW, stagingH, texDesc.Format);
+                return;
             }
 
-            if (!IsCapturing) return;
+            var texDesc = textureToRead.Description;
+            int stagingW = m_region != null ? targetW : texDesc.Width;
+            int stagingH = m_region != null ? targetH : texDesc.Height;
             
-            int writeIdx = _writeIndex;
-            if (writeIdx == _readIndex)
-                writeIdx = (writeIdx + 1) % 3;
-            if (writeIdx == _readyIndex && _readyIndex == _readIndex)
-                writeIdx = (writeIdx + 1) % 3;
+            if (m_stagingTexture == null || 
+                m_stagingTexture.Description.Width != stagingW ||
+                m_stagingTexture.Description.Height != stagingH ||
+                m_stagingTexture.Description.Format != texDesc.Format)
+            {
+                m_stagingTexture?.Dispose();
+                m_stagingTexture = Direct3D11Helper.CreateStagingTexture(
+                    m_sharpDxDevice, stagingW, stagingH, texDesc.Format);
+            }
+
+            if (!IsCapturing)
+            {
+                return;
+            }
             
-            ref var buffer = ref _buffers[writeIdx];
+            int writeIdx = m_writeIndex;
+            if (writeIdx == m_readIndex)
+            {
+                writeIdx = (writeIdx + 1) % 3;
+            }
+            if (writeIdx == m_readyIndex && m_readyIndex == m_readIndex)
+            {
+                writeIdx = (writeIdx + 1) % 3;
+            }
+            
+            ref var buffer = ref m_buffers[writeIdx];
             if (buffer == null || buffer.Width != targetW || buffer.Height != targetH)
             {
                 buffer?.Dispose();
                 buffer = new Mat(targetH, targetW, MatType.CV_8UC4);
             }
 
-            bool success = _stagingTexture.FillMat(_sharpDxDevice, textureToRead, buffer, _region);
+            bool success = m_stagingTexture.FillMat(m_sharpDxDevice, textureToRead, buffer, m_region);
 
             if (success)
             {
-                _readyIndex = writeIdx;
-                _writeIndex = (writeIdx + 1) % 3;
-                _frameCount++;
+                m_readyIndex = writeIdx;
+                m_writeIndex = (writeIdx + 1) % 3;
+                m_frameCount++;
             }
         }
         catch (SharpDXException ex)
@@ -290,11 +326,13 @@ public class GraphicsCapture : IScreenCapture
         catch (Exception ex)
         {
             if (IsCapturing)
+            {
                 Log.Debug("[GraphicsCapture] Frame error: {Error}", ex.Message);
+            }
         }
         finally
         {
-            _isProcessing = false;
+            m_isProcessing = false;
         }
     }
 

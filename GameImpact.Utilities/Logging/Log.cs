@@ -19,10 +19,10 @@ namespace GameImpact.Utilities.Logging;
 public static class Log
 {
     /// <summary>日志工厂实例，用于按类别创建 <see cref="ILogger"/></summary>
-    private static ILoggerFactory? _factory;
+    private static ILoggerFactory? s_factory;
 
     /// <summary>默认 Logger（类别名 "GameImpact"），所有静态方法通过此实例输出</summary>
-    private static ILogger? _defaultLogger;
+    private static ILogger? s_defaultLogger;
 
     /// <summary>日志级别 → 缩写映射表（DBG / INF / WRN / ERR）</summary>
     private static readonly Dictionary<LogLevel, string> LevelAbbreviations = new() {
@@ -60,8 +60,8 @@ public static class Log
     /// <param name="factory">由 DI 容器或手动构建的日志工厂</param>
     public static void Initialize(ILoggerFactory factory)
     {
-        _factory = factory;
-        _defaultLogger = factory.CreateLogger("GameImpact");
+        s_factory = factory;
+        s_defaultLogger = factory.CreateLogger("GameImpact");
     }
 
     /// <summary>
@@ -70,7 +70,7 @@ public static class Log
     /// </summary>
     /// <typeparam name="T">日志类别对应的类型（通常为调用方的类）</typeparam>
     /// <returns>强类型 Logger 实例</returns>
-    public static ILogger<T> For<T>() => _factory?.CreateLogger<T>() ?? NullLogger<T>.Instance;
+    public static ILogger<T> For<T>() => s_factory?.CreateLogger<T>() ?? NullLogger<T>.Instance;
 
     /// <summary>
     /// 获取指定名称的 Logger。
@@ -78,7 +78,7 @@ public static class Log
     /// </summary>
     /// <param name="categoryName">日志类别名称（如 "GameImpact.Input"）</param>
     /// <returns>Logger 实例</returns>
-    public static ILogger For(string categoryName) => _factory?.CreateLogger(categoryName) ?? NullLogger.Instance;
+    public static ILogger For(string categoryName) => s_factory?.CreateLogger(categoryName) ?? NullLogger.Instance;
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  常规日志方法（仅输出到日志后端 + 触发 OnLogMessage）
@@ -115,7 +115,7 @@ public static class Log
     /// <param name="message">附加的描述消息</param>
     public static void Error(Exception ex, string message)
     {
-        _defaultLogger?.LogError(ex, "{Message}", message);
+        s_defaultLogger?.LogError(ex, "{Message}", message);
         RaiseLogMessage("ERR", $"{message}: {ex.Message}");
     }
 
@@ -168,7 +168,7 @@ public static class Log
     /// </summary>
     /// <param name="level">要检查的日志级别</param>
     /// <returns>若已初始化且该级别已启用则返回 true；否则返回 false</returns>
-    public static bool IsEnabled(LogLevel level) => _defaultLogger is not null && _defaultLogger.IsEnabled(level);
+    public static bool IsEnabled(LogLevel level) => s_defaultLogger is not null && s_defaultLogger.IsEnabled(level);
 
     /// <summary>
     /// 常规日志核心方法（纯文本）：写入日志后端 + 触发 OnLogMessage。
@@ -178,7 +178,7 @@ public static class Log
     /// <param name="message">日志消息</param>
     private static void LogInternal(LogLevel level, string message)
     {
-        _defaultLogger?.Log(level, "{Message}", message);
+        s_defaultLogger?.Log(level, "{Message}", message);
         RaiseLogMessage(GetLevelAbbreviation(level), message);
     }
 
@@ -191,7 +191,7 @@ public static class Log
     /// <param name="args">按顺序替换占位符的参数</param>
     private static void LogInternal(LogLevel level, string message, object[] args)
     {
-        _defaultLogger?.Log(level, "{Message}", Format(message, args));
+        s_defaultLogger?.Log(level, "{Message}", Format(message, args));
         RaiseLogMessage(GetLevelAbbreviation(level), Format(message, args));
     }
 
@@ -204,7 +204,7 @@ public static class Log
     private static void LogScreenInternal(LogLevel level, string message)
     {
         var abbr = GetLevelAbbreviation(level);
-        _defaultLogger?.Log(level, "{Message}", message);
+        s_defaultLogger?.Log(level, "{Message}", message);
         RaiseLogMessage(abbr, message);
         RaiseScreenLogMessage(abbr, message);
     }
@@ -223,7 +223,7 @@ public static class Log
     {
         var abbr = GetLevelAbbreviation(level);
         var formattedMessage = Format(message, args);
-        _defaultLogger?.Log(level, "{Message}", formattedMessage);
+        s_defaultLogger?.Log(level, "{Message}", formattedMessage);
         RaiseLogMessage(abbr, formattedMessage);
         RaiseScreenLogMessage(abbr, formattedMessage);
     }
@@ -280,7 +280,9 @@ public static class Log
             return PlaceholderRegex.Replace(template, match =>
             {
                 if (index < args.Length)
+                {
                     return args[index++].ToString() ?? "";
+                }
                 return match.Value; // 参数不足时保留原占位符
             });
         }

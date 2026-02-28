@@ -1,0 +1,26 @@
+root = true
+
+# =========================
+# 基础格式（与 code.mdc 对齐）
+# =========================
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+
+[*.{cs,csx}]
+indent_style = space
+indent_size = 4
+tab_width = 4
+
+# =========================
+# C# 代码风格（重点约束“必须”项）
+# =========================
+
+# 【必须】if/while 等语句必须带大括号
+csharp_prefer_braces = true:error
+dotnet_diagnostic.IDE0011.severity = error
+
+# 【必须】左花括号换行（Allman）
+csharp_new_line_before_open_brace = all
+

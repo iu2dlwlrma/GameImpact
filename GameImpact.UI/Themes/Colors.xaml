@@ -5,30 +5,44 @@
     <Color x:Key="Dark.Background">#0A0A0C</Color>
     <Color x:Key="Dark.Surface">#141418</Color>
     <Color x:Key="Dark.SurfaceVariant">#1C1C22</Color>
+    <Color x:Key="Dark.SurfaceHover">#24242A</Color>
     <Color x:Key="Dark.Border">#2A2A32</Color>
     <Color x:Key="Dark.BorderSubtle">#1E1E24</Color>
+    <Color x:Key="Dark.BorderHover">#3A3A42</Color>
     <Color x:Key="Dark.Text">#E8E8EC</Color>
     <Color x:Key="Dark.TextSecondary">#9898A0</Color>
     <Color x:Key="Dark.TextMuted">#5C5C64</Color>
     <Color x:Key="Dark.Accent">#B8A080</Color>
     <Color x:Key="Dark.AccentHover">#D4BC98</Color>
+    <Color x:Key="Dark.AccentLight">#E8D4B8</Color>
+    <Color x:Key="Dark.AccentDark">#9C8868</Color>
     <Color x:Key="Dark.Success">#6AAF7C</Color>
+    <Color x:Key="Dark.SuccessHover">#7ABF8C</Color>
     <Color x:Key="Dark.Warning">#D4A84C</Color>
+    <Color x:Key="Dark.WarningHover">#E4B85C</Color>
     <Color x:Key="Dark.Error">#C45C5C</Color>
+    <Color x:Key="Dark.ErrorHover">#D46C6C</Color>
     
     <!-- 低调奢华风 - 亮色主题 -->
     <Color x:Key="Light.Background">#F8F7F5</Color>
     <Color x:Key="Light.Surface">#FFFFFF</Color>
     <Color x:Key="Light.SurfaceVariant">#F0EEE8</Color>
+    <Color x:Key="Light.SurfaceHover">#E8E4DC</Color>
     <Color x:Key="Light.Border">#D8D4CC</Color>
     <Color x:Key="Light.BorderSubtle">#E8E4DC</Color>
+    <Color x:Key="Light.BorderHover">#C8C4BC</Color>
     <Color x:Key="Light.Text">#1A1A1C</Color>
     <Color x:Key="Light.TextSecondary">#5C5C64</Color>
     <Color x:Key="Light.TextMuted">#9898A0</Color>
     <Color x:Key="Light.Accent">#8C7860</Color>
     <Color x:Key="Light.AccentHover">#6C5C48</Color>
+    <Color x:Key="Light.AccentLight">#A89880</Color>
+    <Color x:Key="Light.AccentDark">#6C5C48</Color>
     <Color x:Key="Light.Success">#4A8F5C</Color>
+    <Color x:Key="Light.SuccessHover">#3A7F4C</Color>
     <Color x:Key="Light.Warning">#B48830</Color>
+    <Color x:Key="Light.WarningHover">#A47820</Color>
     <Color x:Key="Light.Error">#A44040</Color>
+    <Color x:Key="Light.ErrorHover">#943030</Color>
     
 </ResourceDictionary>

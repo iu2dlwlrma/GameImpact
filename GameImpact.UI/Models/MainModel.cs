@@ -18,15 +18,18 @@ using OpenCvSharp;
 
 namespace GameImpact.UI;
 
+/// <summary>
+/// 主视图模型，管理窗口选择、屏幕捕获、OCR识别等核心功能
+/// </summary>
 public partial class MainModel : ObservableObject
 {
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(nint hWnd);
 
-    private readonly GameContext _context;
-    private readonly DispatcherTimer _logTimer;
-    private readonly Queue<string> _logQueue = new();
+    private readonly GameContext m_context;
+    private readonly DispatcherTimer m_logTimer;
+    private readonly Queue<string> m_logQueue = new();
 
     [ObservableProperty] private string _windowDisplayText = "未选择窗口";
     [ObservableProperty] private string _captureButtonText = "启动";
@@ -45,107 +48,144 @@ public partial class MainModel : ObservableObject
     [ObservableProperty] private bool _enablePreview = true;
     [ObservableProperty] private bool _autoScrollLog = true;
 
-    private nint _hWnd;
-    private string _windowTitle = "";
-    private int _lastFrameCount;
-    private readonly Stopwatch _fpsTimer = new();
-    private WriteableBitmap? _writeableBitmap;
-    private bool _isRendering;
+    private nint m_hWnd;
+    private string m_windowTitle = "";
+    private int m_lastFrameCount;
+    private readonly Stopwatch m_fpsTimer = new();
+    private WriteableBitmap? m_writeableBitmap;
+    private bool m_isRendering;
 
     // Overlay 窗口
     public OverlayWindow Overlay => OverlayWindow.Instance;
 
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    /// <param name="context">游戏上下文</param>
     public MainModel(GameContext context)
     {
-        _context = context;
+        m_context = context;
 
-        _logTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
-        _logTimer.Tick += OnLogTick;
+        m_logTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        m_logTimer.Tick += OnLogTick;
 
         // 监听屏幕日志（业务关键信息）
         Log.OnScreenLogMessage += OnScreenLogReceived;
-        _logTimer.Start();
+        m_logTimer.Start();
     }
 
+    /// <summary>
+    /// 接收日志消息（仅DEBUG模式）
+    /// </summary>
+    /// <param name="level">日志级别</param>
+    /// <param name="message">日志消息</param>
     private void OnLogReceived(string level, string message)
     {
 #if DEBUG
-        lock (_logQueue)
+        lock (m_logQueue)
         {
-            _logQueue.Enqueue($"[{DateTime.Now:HH:mm:ss}] [{level}] {message}");
-            while (_logQueue.Count > 300) _logQueue.Dequeue();
+            m_logQueue.Enqueue($"[{DateTime.Now:HH:mm:ss}] [{level}] {message}");
+            while (m_logQueue.Count > 300)
+            {
+                m_logQueue.Dequeue();
+            }
         }
 #endif
     }
 
+    /// <summary>
+    /// 接收屏幕日志消息
+    /// </summary>
+    /// <param name="level">日志级别</param>
+    /// <param name="message">日志消息</param>
     private void OnScreenLogReceived(string level, string message)
     {
-        lock (_logQueue)
+        lock (m_logQueue)
         {
-            _logQueue.Enqueue($"[{DateTime.Now:HH:mm:ss}] [{level}] {message}");
-            while (_logQueue.Count > 300) _logQueue.Dequeue();
+            m_logQueue.Enqueue($"[{DateTime.Now:HH:mm:ss}] [{level}] {message}");
+            while (m_logQueue.Count > 300)
+            {
+                m_logQueue.Dequeue();
+            }
         }
     }
 
+    /// <summary>
+    /// 日志定时器回调：更新日志文本显示
+    /// </summary>
     private void OnLogTick(object? sender, EventArgs e)
     {
-        lock (_logQueue)
+        lock (m_logQueue)
         {
-            if (_logQueue.Count > 0)
-                LogText = string.Join("\n", _logQueue);
+            if (m_logQueue.Count > 0)
+            {
+                LogText = string.Join("\n", m_logQueue);
+            }
         }
     }
 
+    /// <summary>
+    /// 预览开关变更时的处理
+    /// </summary>
+    /// <param name="value">是否启用预览</param>
     partial void OnEnablePreviewChanged(bool value)
     {
         if (!value)
         {
             PreviewSource = null;
-            _writeableBitmap = null;
+            m_writeableBitmap = null;
         }
     }
 
+    /// <summary>
+    /// 渲染回调：更新预览图像
+    /// </summary>
     private void OnRendering(object? sender, EventArgs e)
     {
-        if (_context.Capture?.IsCapturing != true || !_isRendering) return;
+        if (m_context.Capture?.IsCapturing != true || !m_isRendering) return;
 
         try
         {
-            if (!_context.Capture.TryGetFrameData(out var data, out var width, out var height, out var step))
+            if (!m_context.Capture.TryGetFrameData(out var data, out var width, out var height, out var step))
+            {
                 return;
+            }
 
             try
             {
                 // 更新 FPS
-                if (_fpsTimer.ElapsedMilliseconds >= 1000)
+                if (m_fpsTimer.ElapsedMilliseconds >= 1000)
                 {
-                    var currentFrameCount = _context.Capture.FrameCount;
-                    var framesDelta = currentFrameCount - _lastFrameCount;
-                    var fps = framesDelta * 1000.0 / _fpsTimer.ElapsedMilliseconds;
+                    var currentFrameCount = m_context.Capture.FrameCount;
+                    var framesDelta = currentFrameCount - m_lastFrameCount;
+                    var fps = framesDelta * 1000.0 / m_fpsTimer.ElapsedMilliseconds;
                     StatusText = $"{fps:F1} FPS";
                     PreviewFps = $"{fps:F1}";
-                    _lastFrameCount = currentFrameCount;
-                    _fpsTimer.Restart();
+                    m_lastFrameCount = currentFrameCount;
+                    m_fpsTimer.Restart();
                 }
 
                 PreviewResolution = $"{width} × {height}";
 
                 // 预览渲染
-                if (!EnablePreview) return;
-
-                if (_writeableBitmap == null ||
-                        _writeableBitmap.PixelWidth != width ||
-                        _writeableBitmap.PixelHeight != height)
+                if (!EnablePreview)
                 {
-                    _writeableBitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
-                    PreviewSource = _writeableBitmap;
+                    return;
                 }
 
-                _writeableBitmap.Lock();
+                if (m_writeableBitmap == null ||
+                        m_writeableBitmap.PixelWidth != width ||
+                        m_writeableBitmap.PixelHeight != height)
+                {
+                    m_writeableBitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
+                    PreviewSource = m_writeableBitmap;
+                }
+
+                m_writeableBitmap.Lock();
                 try
                 {
-                    var backBuffer = _writeableBitmap.BackBuffer;
-                    var backBufferStride = _writeableBitmap.BackBufferStride;
+                    var backBuffer = m_writeableBitmap.BackBuffer;
+                    var backBufferStride = m_writeableBitmap.BackBufferStride;
 
                     unsafe
                     {
@@ -168,16 +208,16 @@ public partial class MainModel : ObservableObject
                         }
                     }
 
-                    _writeableBitmap.AddDirtyRect(new System.Windows.Int32Rect(0, 0, width, height));
+                    m_writeableBitmap.AddDirtyRect(new System.Windows.Int32Rect(0, 0, width, height));
                 }
                 finally
                 {
-                    _writeableBitmap.Unlock();
+                    m_writeableBitmap.Unlock();
                 }
             }
             finally
             {
-                _context.Capture.ReleaseFrame();
+                m_context.Capture.ReleaseFrame();
             }
         }
         catch (Exception ex)
@@ -193,8 +233,8 @@ public partial class MainModel : ObservableObject
         if (dialog.ShowDialog() == true && dialog.SelectedWindow != null)
         {
             var window = dialog.SelectedWindow;
-            _hWnd = window.Handle;
-            _windowTitle = window.Title;
+            m_hWnd = window.Handle;
+            m_windowTitle = window.Title;
             WindowDisplayText = $"{window.ProcessName}";
             StatusMessage = $"已选择: {window.ProcessName}";
             Log.InfoScreen("[UI] 选择窗口: {Process} ({Handle})", window.ProcessName, window.HandleText);
@@ -205,14 +245,18 @@ public partial class MainModel : ObservableObject
     private void ToggleCapture()
     {
         if (IsCapturing)
+        {
             StopCapture();
+        }
         else
+        {
             StartCapture();
+        }
     }
 
     private void StartCapture()
     {
-        if (_hWnd == nint.Zero)
+        if (m_hWnd == nint.Zero)
         {
             StatusMessage = "请先选择窗口";
             return;
@@ -220,13 +264,13 @@ public partial class MainModel : ObservableObject
 
         try
         {
-            if (_isRendering)
+            if (m_isRendering)
             {
-                _isRendering = false;
+                m_isRendering = false;
                 CompositionTarget.Rendering -= OnRendering;
             }
 
-            _context.Initialize(_hWnd, useGpuHdrConversion: UseGpuHdrConversion);
+            m_context.Initialize(m_hWnd, useGpuHdrConversion: UseGpuHdrConversion);
 
             IsCapturing = true;
             IsIdle = false;
@@ -235,11 +279,11 @@ public partial class MainModel : ObservableObject
             Log.InfoScreen("[UI] 开始捕获 (GPU HDR: {UseGpu})", UseGpuHdrConversion ? "开启" : "关闭");
 
             // 启动 Overlay 窗口
-            OverlayWindow.Instance.AttachTo(_hWnd);
+            OverlayWindow.Instance.AttachTo(m_hWnd);
 
-            _lastFrameCount = 0;
-            _fpsTimer.Restart();
-            _isRendering = true;
+            m_lastFrameCount = 0;
+            m_fpsTimer.Restart();
+            m_isRendering = true;
             CompositionTarget.Rendering += OnRendering;
         }
         catch (Exception ex)
@@ -251,9 +295,9 @@ public partial class MainModel : ObservableObject
 
     private void StopCapture()
     {
-        _isRendering = false;
+        m_isRendering = false;
         CompositionTarget.Rendering -= OnRendering;
-        _context.Capture?.Stop();
+        m_context.Capture?.Stop();
 
         // 关闭 Overlay
         OverlayWindow.Instance.Detach();
@@ -266,15 +310,15 @@ public partial class MainModel : ObservableObject
         PreviewSource = null;
         PreviewFps = "-";
         PreviewResolution = "-";
-        _writeableBitmap = null;
+            m_writeableBitmap = null;
         Log.InfoScreen("[UI] 停止捕获");
     }
 
     public void ClearLog()
     {
-        lock (_logQueue)
+        lock (m_logQueue)
         {
-            _logQueue.Clear();
+            m_logQueue.Clear();
             LogText = "";
         }
     }
@@ -314,9 +358,9 @@ public partial class MainModel : ObservableObject
     /// </summary>
     private async Task BringTargetToForeground()
     {
-        if (_context.WindowHandle != nint.Zero)
+        if (m_context.WindowHandle != nint.Zero)
         {
-            SetForegroundWindow(_context.WindowHandle);
+            SetForegroundWindow(m_context.WindowHandle);
             await Task.Delay(300); // 等待窗口切换完成
         }
     }
@@ -327,7 +371,7 @@ public partial class MainModel : ObservableObject
         {
             await BringTargetToForeground();
 
-            var result = _context.Input.Mouse.ForegroundClickAt(x, y);
+            var result = m_context.Input.Mouse.ForegroundClickAt(x, y);
             Log.DebugScreen("[Input] 鼠标点击 ({X}, {Y})", x, y);
 
             // 在 Overlay 上绘制点击标记
@@ -345,7 +389,7 @@ public partial class MainModel : ObservableObject
         {
             await BringTargetToForeground();
 
-            _context.Input.Mouse.MoveTo(x, y);
+            m_context.Input.Mouse.MoveTo(x, y);
             Log.DebugScreen("[Input] 鼠标移动 ({X}, {Y})", x, y);
         }
         catch (Exception ex)
@@ -362,12 +406,12 @@ public partial class MainModel : ObservableObject
 
             if (Enum.TryParse<GameImpact.Abstractions.Input.VirtualKey>(key, true, out var vk))
             {
-                _context.Input.Keyboard.KeyPress(vk);
+                m_context.Input.Keyboard.KeyPress(vk);
                 Log.DebugScreen("[Input] 按键 {Key}", key);
             }
             else
             {
-                _context.Input.Keyboard.TextEntry(key);
+                m_context.Input.Keyboard.TextEntry(key);
                 Log.DebugScreen("[Input] 文本输入 {Key}", key);
             }
         }
@@ -406,19 +450,19 @@ public partial class MainModel : ObservableObject
             {
                 // 组合键：按下修饰键 -> 按目标键 -> 释放修饰键
                 foreach (var mk in modifierKeys)
-                    _context.Input.Keyboard.KeyDown(mk);
+                    m_context.Input.Keyboard.KeyDown(mk);
 
-                _context.Input.Keyboard.KeyPress(vk);
+                m_context.Input.Keyboard.KeyPress(vk);
 
                 foreach (var mk in modifierKeys)
-                    _context.Input.Keyboard.KeyUp(mk);
+                    m_context.Input.Keyboard.KeyUp(mk);
 
                 var modStr = string.Join("+", modifierKeys.Select(k => k.ToString()));
                 Log.DebugScreen("[Input] 组合键 {Mods}+{Key}", modStr, vk);
             }
             else
             {
-                _context.Input.Keyboard.KeyPress(vk);
+                m_context.Input.Keyboard.KeyPress(vk);
                 Log.DebugScreen("[Input] 按键 {Key}", vk);
             }
         }
@@ -442,7 +486,7 @@ public partial class MainModel : ObservableObject
 
     public string? TestOcr(int x, int y, int width, int height)
     {
-        if (!IsCapturing || _context.Capture == null)
+        if (!IsCapturing || m_context.Capture == null)
         {
             Log.WarnScreen("[OCR] 请先启动捕获");
             return null;
@@ -450,7 +494,7 @@ public partial class MainModel : ObservableObject
 
         try
         {
-            var frame = _context.Capture.Capture();
+            var frame = m_context.Capture.Capture();
             if (frame == null)
             {
                 Log.WarnScreen("[OCR] 无法获取帧");
@@ -466,7 +510,7 @@ public partial class MainModel : ObservableObject
                 }
 
                 var roi = new Rect(x, y, width, height);
-                var results = _context.Ocr.Recognize(frame, roi);
+                var results = m_context.Ocr.Recognize(frame, roi);
 
                 // 在 Overlay 上绘制结果
                 var drawResults = results.Select(r => (r.BoundingBox, r.Text)).ToList();
@@ -497,7 +541,7 @@ public partial class MainModel : ObservableObject
     /// </summary>
     public (int x, int y)? FindText(string searchText)
     {
-        if (!IsCapturing || _context.Capture == null)
+        if (!IsCapturing || m_context.Capture == null)
         {
             Log.WarnScreen("[OCR] 请先启动捕获");
             return null;
@@ -505,7 +549,7 @@ public partial class MainModel : ObservableObject
 
         try
         {
-            var frame = _context.Capture.Capture();
+            var frame = m_context.Capture.Capture();
             if (frame == null)
             {
                 Log.WarnScreen("[OCR] 无法获取帧");
@@ -514,7 +558,7 @@ public partial class MainModel : ObservableObject
 
             using (frame)
             {
-                var results = _context.Ocr.Recognize(frame);
+                var results = m_context.Ocr.Recognize(frame);
 
                 // 查找匹配的文本
                 var match = results.FirstOrDefault(r =>
@@ -550,7 +594,7 @@ public partial class MainModel : ObservableObject
     /// </summary>
     public List<(int x, int y, string text)>? RecognizeFullScreen()
     {
-        if (!IsCapturing || _context.Capture == null)
+        if (!IsCapturing || m_context.Capture == null)
         {
             Log.WarnScreen("[OCR] 请先启动捕获");
             return null;
@@ -558,7 +602,7 @@ public partial class MainModel : ObservableObject
 
         try
         {
-            var frame = _context.Capture.Capture();
+            var frame = m_context.Capture.Capture();
             if (frame == null)
             {
                 Log.WarnScreen("[OCR] 无法获取帧");
@@ -567,7 +611,7 @@ public partial class MainModel : ObservableObject
 
             using (frame)
             {
-                var results = _context.Ocr.Recognize(frame);
+                var results = m_context.Ocr.Recognize(frame);
 
                 // 在 Overlay 上绘制所有结果
                 var fullRoi = new Rect(0, 0, frame.Width, frame.Height);
@@ -600,7 +644,7 @@ public partial class MainModel : ObservableObject
     /// </summary>
     public void StartScreenshotTool(Action? onSaved = null)
     {
-        if (!IsCapturing || _context.Capture == null)
+        if (!IsCapturing || m_context.Capture == null)
         {
             Log.WarnScreen("[截图] 请先启动捕获");
             return;
@@ -616,7 +660,7 @@ public partial class MainModel : ObservableObject
 
             try
             {
-                var frame = _context.Capture.Capture();
+                var frame = m_context.Capture.Capture();
                 if (frame == null)
                 {
                     Log.WarnScreen("[截图] 无法获取帧");
@@ -670,7 +714,7 @@ public partial class MainModel : ObservableObject
     {
         if (string.IsNullOrEmpty(fileName))
             return (false, 0, 0, 0);
-        if (!IsCapturing || _context.Capture == null)
+        if (!IsCapturing || m_context.Capture == null)
         {
             Log.WarnScreen("[识别] 请先启动捕获");
             return (false, 0, 0, 0);
@@ -692,7 +736,7 @@ public partial class MainModel : ObservableObject
                 return (false, 0, 0, 0);
             }
 
-            var frame = _context.Capture.Capture();
+            var frame = m_context.Capture.Capture();
             if (frame == null)
             {
                 Log.WarnScreen("[识别] 无法获取当前帧");
@@ -701,7 +745,7 @@ public partial class MainModel : ObservableObject
 
             using (frame)
             {
-                var result = _context.Recognition.MatchTemplate(frame, template);
+                var result = m_context.Recognition.MatchTemplate(frame, template);
                 if (result.Success)
                 {
                     var rect = new Rect(result.Location.X, result.Location.Y, result.Size.Width, result.Size.Height);

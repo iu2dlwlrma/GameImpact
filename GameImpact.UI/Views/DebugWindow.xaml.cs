@@ -32,7 +32,9 @@ public partial class DebugWindow : Window
         TemplateListCombo.ItemsSource = null;
         TemplateListCombo.ItemsSource = _templateFiles;
         if (_templateFiles.Count > 0 && TemplateListCombo.SelectedIndex < 0)
+        {
             TemplateListCombo.SelectedIndex = 0;
+        }
     }
 
     private void ScreenshotTool_Click(object sender, RoutedEventArgs e)
@@ -58,13 +60,17 @@ public partial class DebugWindow : Window
             MouseY.Text = y.ToString();
         }
         else
+        {
             AppendInputLog($"未匹配到模板: '{selected}'");
+        }
     }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.LeftButton == MouseButtonState.Pressed)
+        {
             DragMove();
+        }
     }
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
@@ -255,7 +261,9 @@ public partial class DebugWindow : Window
                 AppendInputLog($"  [{r.x},{r.y}] {r.text}");
             }
             if (results.Count > 10)
+            {
                 AppendInputLog($"  ... 还有 {results.Count - 10} 个");
+            }
         }
         else
         {
@@ -268,6 +276,8 @@ public partial class DebugWindow : Window
         var line = $"[{DateTime.Now:HH:mm:ss}] {message}\n";
         InputTestLog.Text = line + InputTestLog.Text;
         if (InputTestLog.Text.Length > 5000)
+        {
             InputTestLog.Text = InputTestLog.Text[..5000];
+        }
     }
 }
