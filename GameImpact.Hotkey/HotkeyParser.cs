@@ -3,12 +3,22 @@ using HotkeyKeys = GameImpact.Abstractions.Hotkey.Keys;
 
 namespace GameImpact.Hotkey;
 
+/// <summary>
+/// 热键字符串解析器
+/// </summary>
 public static class HotkeyParser
 {
+    /// <summary>
+    /// 解析热键字符串
+    /// </summary>
+    /// <param name="hotkeyString">热键字符串，格式如 "Ctrl+Alt+F1"</param>
+    /// <returns>修饰键和主键的元组</returns>
     public static (ModifierKeys Modifiers, HotkeyKeys Key) Parse(string hotkeyString)
     {
         if (string.IsNullOrWhiteSpace(hotkeyString))
+        {
             throw new ArgumentException("Hotkey string cannot be empty");
+        }
 
         var modifiers = ModifierKeys.None;
         var key = HotkeyKeys.None;
@@ -35,17 +45,27 @@ public static class HotkeyParser
                     break;
                 default:
                     if (Enum.TryParse<HotkeyKeys>(part, true, out var k))
+                    {
                         key = k;
+                    }
                     break;
             }
         }
 
         if (key == HotkeyKeys.None)
+        {
             throw new ArgumentException($"Invalid hotkey: {hotkeyString}");
+        }
 
         return (modifiers, key);
     }
 
+    /// <summary>
+    /// 将修饰键和主键转换为字符串
+    /// </summary>
+    /// <param name="modifiers">修饰键</param>
+    /// <param name="key">主键</param>
+    /// <returns>热键字符串</returns>
     public static string ToString(ModifierKeys modifiers, HotkeyKeys key)
     {
         var parts = new List<string>();

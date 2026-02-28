@@ -7,6 +7,9 @@ using GameImpact.UI.Models;
 
 namespace GameImpact.UI.Services;
 
+/// <summary>
+/// 窗口枚举器，用于获取系统中所有可见窗口的信息
+/// </summary>
 public static class WindowEnumerator
 {
     [DllImport("user32.dll")]
@@ -38,6 +41,10 @@ public static class WindowEnumerator
 
     private delegate bool EnumWindowsProc(nint hWnd, nint lParam);
 
+    /// <summary>
+    /// 获取所有可见窗口的信息列表
+    /// </summary>
+    /// <returns>窗口信息列表</returns>
     public static List<WindowInfo> GetAllWindows()
     {
         var windows = new List<WindowInfo>();

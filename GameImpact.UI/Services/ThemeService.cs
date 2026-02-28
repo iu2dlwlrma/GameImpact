@@ -6,10 +6,13 @@ namespace GameImpact.UI.Services;
 
 public enum AppTheme { Dark, Light }
 
+/// <summary>
+/// 应用程序主题服务
+/// </summary>
 public class ThemeService
 {
-    private static ThemeService? _instance;
-    public static ThemeService Instance => _instance ??= new ThemeService();
+    private static ThemeService? s_instance;
+    public static ThemeService Instance => s_instance ??= new ThemeService();
 
     public AppTheme CurrentTheme { get; private set; } = AppTheme.Dark;
     public event Action<AppTheme>? ThemeChanged;

@@ -11,36 +11,53 @@ namespace GameImpact.Capture;
 /// GPU 端 HDR→SDR 转换器，使用 Compute Shader
 /// 包含多重保护机制防止 GPU 错误导致系统死机
 /// </summary>
+/// <summary>
+/// GPU 端 HDR→SDR 转换器，使用 Compute Shader
+/// </summary>
 public class GpuHdrConverter : IDisposable
 {
-    private readonly Device _device;
-    private ComputeShader? _computeShader;
-    private Texture2D? _outputTexture;
-    private Texture2D? _inputCopyTexture;
-    private UnorderedAccessView? _outputUav;
-    private ShaderResourceView? _inputSrv;
-    private int _width, _height;
-    private bool _initialized;
-    private bool _initFailed;
-    private int _consecutiveErrors;
+    private readonly Device m_device;
+    private ComputeShader? m_computeShader;
+    private Texture2D? m_outputTexture;
+    private Texture2D? m_inputCopyTexture;
+    private UnorderedAccessView? m_outputUav;
+    private ShaderResourceView? m_inputSrv;
+    private int m_width, m_height;
+    private bool m_initialized;
+    private bool m_initFailed;
+    private int m_consecutiveErrors;
     private const int MaxConsecutiveErrors = 3;
 
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    /// <param name="device">Direct3D 11 设备</param>
     public GpuHdrConverter(Device device)
     {
-        _device = device;
+        m_device = device;
     }
 
+    /// <summary>
+    /// 确保已初始化
+    /// </summary>
+    /// <returns>是否初始化成功</returns>
     private bool EnsureInitialized()
     {
-        if (_initialized) return true;
-        if (_initFailed) return false;
+        if (m_initialized)
+        {
+            return true;
+        }
+        if (m_initFailed)
+        {
+            return false;
+        }
 
         try
         {
             // 检查设备状态
-            if (_device.IsDisposed)
+            if (m_device.IsDisposed)
             {
-                _initFailed = true;
+                m_initFailed = true;
                 return false;
             }
 
@@ -52,19 +69,19 @@ public class GpuHdrConverter : IDisposable
 
             if (bytecode.HasErrors)
             {
-                _initFailed = true;
+                m_initFailed = true;
                 Log.Error("[GpuHdrConverter] HLSL errors: {Errors}", bytecode.Message);
                 return false;
             }
 
-            _computeShader = new ComputeShader(_device, bytecode);
-            _initialized = true;
+            m_computeShader = new ComputeShader(m_device, bytecode);
+            m_initialized = true;
             Log.Info("[GpuHdrConverter] Shader compiled successfully");
             return true;
         }
         catch (Exception ex)
         {
-            _initFailed = true;
+            m_initFailed = true;
             Log.Error("[GpuHdrConverter] Init failed: {Error}", ex.Message);
             return false;
         }
@@ -73,31 +90,38 @@ public class GpuHdrConverter : IDisposable
     /// <summary>
     /// 执行 HDR→SDR 转换，带完整的错误保护
     /// </summary>
+    /// <summary>
+    /// 执行 HDR→SDR 转换，带完整的错误保护
+    /// </summary>
+    /// <param name="hdrTexture">HDR纹理</param>
+    /// <returns>转换后的SDR纹理，失败时返回null</returns>
     public Texture2D? Convert(Texture2D hdrTexture)
     {
         // 连续错误过多，直接禁用 GPU 转换
-        if (_consecutiveErrors >= MaxConsecutiveErrors)
+        if (m_consecutiveErrors >= MaxConsecutiveErrors)
         {
             return null;
         }
 
         if (!EnsureInitialized())
+        {
             return null;
+        }
 
         try
         {
             // 检查设备是否被移除
-            if (_device.IsDisposed)
+            if (m_device.IsDisposed)
             {
-                _initFailed = true;
+                m_initFailed = true;
                 return null;
             }
             
-            var deviceRemovedReason = _device.DeviceRemovedReason;
+            var deviceRemovedReason = m_device.DeviceRemovedReason;
             if (deviceRemovedReason.Code != 0)
             {
                 Log.Error("[GpuHdrConverter] Device removed: 0x{Code:X}", deviceRemovedReason.Code);
-                _initFailed = true;
+                m_initFailed = true;
                 return null;
             }
 
@@ -119,22 +143,22 @@ public class GpuHdrConverter : IDisposable
                 return null;
             }
 
-            if (_outputTexture == null || _width != width || _height != height)
+            if (m_outputTexture == null || m_width != width || m_height != height)
             {
                 CreateTextures(width, height, desc.Format);
-                _width = width;
-                _height = height;
+                m_width = width;
+                m_height = height;
             }
 
-            var context = _device.ImmediateContext;
+            var context = m_device.ImmediateContext;
             
             // 复制输入纹理
-            context.CopySubresourceRegion(hdrTexture, 0, null, _inputCopyTexture, 0, 0, 0, 0);
+            context.CopySubresourceRegion(hdrTexture, 0, null, m_inputCopyTexture, 0, 0, 0, 0);
             
             // 执行 Compute Shader
-            context.ComputeShader.Set(_computeShader);
-            context.ComputeShader.SetShaderResource(0, _inputSrv);
-            context.ComputeShader.SetUnorderedAccessView(0, _outputUav);
+            context.ComputeShader.Set(m_computeShader);
+            context.ComputeShader.SetShaderResource(0, m_inputSrv);
+            context.ComputeShader.SetUnorderedAccessView(0, m_outputUav);
 
             int groupsX = (width + 7) / 8;
             int groupsY = (height + 7) / 8;
@@ -146,34 +170,40 @@ public class GpuHdrConverter : IDisposable
             context.ComputeShader.Set(null);
             
             // 不需要显式同步，后续的 CopyResource/MapSubresource 会自动等待 GPU 完成
-            _consecutiveErrors = 0;
-            return _outputTexture;
+            m_consecutiveErrors = 0;
+            return m_outputTexture;
         }
         catch (SharpDXException ex)
         {
-            _consecutiveErrors++;
+            m_consecutiveErrors++;
             Log.Error("[GpuHdrConverter] SharpDX error: 0x{Code:X} - {Msg}", ex.ResultCode.Code, ex.Message);
             
             if (ex.ResultCode.Code == unchecked((int)0x887A0005) || // DXGI_ERROR_DEVICE_REMOVED
                 ex.ResultCode.Code == unchecked((int)0x887A0006))   // DXGI_ERROR_DEVICE_HUNG
             {
-                _initFailed = true;
+                m_initFailed = true;
             }
             return null;
         }
         catch (Exception ex)
         {
-            _consecutiveErrors++;
+            m_consecutiveErrors++;
             Log.Error("[GpuHdrConverter] Error: {Error}", ex.Message);
             return null;
         }
     }
 
+    /// <summary>
+    /// 创建输入和输出纹理
+    /// </summary>
+    /// <param name="width">纹理宽度</param>
+    /// <param name="height">纹理高度</param>
+    /// <param name="inputFormat">输入纹理格式</param>
     private void CreateTextures(int width, int height, Format inputFormat)
     {
         DisposeTextures();
 
-        _inputCopyTexture = new Texture2D(_device, new Texture2DDescription
+        m_inputCopyTexture = new Texture2D(m_device, new Texture2DDescription
         {
             Width = width,
             Height = height,
@@ -187,9 +217,9 @@ public class GpuHdrConverter : IDisposable
             OptionFlags = ResourceOptionFlags.None
         });
 
-        _inputSrv = new ShaderResourceView(_device, _inputCopyTexture);
+        m_inputSrv = new ShaderResourceView(m_device, m_inputCopyTexture);
 
-        _outputTexture = new Texture2D(_device, new Texture2DDescription
+        m_outputTexture = new Texture2D(m_device, new Texture2DDescription
         {
             Width = width,
             Height = height,
@@ -203,24 +233,28 @@ public class GpuHdrConverter : IDisposable
             OptionFlags = ResourceOptionFlags.None
         });
 
-        _outputUav = new UnorderedAccessView(_device, _outputTexture);
+        m_outputUav = new UnorderedAccessView(m_device, m_outputTexture);
     }
 
+    /// <summary>
+    /// 释放纹理资源
+    /// </summary>
     private void DisposeTextures()
     {
-        _inputSrv?.Dispose();
-        _inputSrv = null;
-        _inputCopyTexture?.Dispose();
-        _inputCopyTexture = null;
-        _outputUav?.Dispose();
-        _outputUav = null;
-        _outputTexture?.Dispose();
-        _outputTexture = null;
+        m_inputSrv?.Dispose();
+        m_inputSrv = null;
+        m_inputCopyTexture?.Dispose();
+        m_inputCopyTexture = null;
+        m_outputUav?.Dispose();
+        m_outputUav = null;
+        m_outputTexture?.Dispose();
+        m_outputTexture = null;
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         DisposeTextures();
-        _computeShader?.Dispose();
+        m_computeShader?.Dispose();
     }
 }

@@ -14,8 +14,8 @@ namespace GameImpact.OCR;
 /// </summary>
 public class PaddleOcrEngine : IOcrEngine
 {
-    private readonly PaddleOCREngine _engine;
-    private bool _disposed;
+    private readonly PaddleOCREngine m_engine;
+    private bool m_disposed;
 
     /// <summary>
     /// 创建 PaddleOCR 引擎（使用默认中英文模型）
@@ -23,7 +23,7 @@ public class PaddleOcrEngine : IOcrEngine
     public PaddleOcrEngine()
     {
         // 使用内置的中英文 V4 模型
-        _engine = new PaddleOCREngine(null, new OCRParameter
+        m_engine = new PaddleOCREngine(null, new OCRParameter
         {
             cpu_math_library_num_threads = 4,
             enable_mkldnn = true,
@@ -42,7 +42,7 @@ public class PaddleOcrEngine : IOcrEngine
         // 使用游戏 UI 专用预处理
         using var processed = GameTextPreprocessor.PreprocessGameUI(image);
         var bytes = processed.ToBytes(".bmp");
-        var result = _engine.DetectText(bytes);
+        var result = m_engine.DetectText(bytes);
         
         return ConvertResult(result);
     }
@@ -74,7 +74,7 @@ public class PaddleOcrEngine : IOcrEngine
         if (image.Empty()) return [];
         
         var bytes = image.ToBytes(".bmp");
-        var result = _engine.DetectText(bytes);
+        var result = m_engine.DetectText(bytes);
         
         if (result?.TextBlocks == null) return [];
         
@@ -113,11 +113,15 @@ public class PaddleOcrEngine : IOcrEngine
         return new Rect(minX, minY, maxX - minX, maxY - minY);
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        _engine.Dispose();
+        if (m_disposed)
+        {
+            return;
+        }
+        m_disposed = true;
+        m_engine.Dispose();
         GC.SuppressFinalize(this);
     }
 }

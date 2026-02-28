@@ -51,20 +51,28 @@ public static class PerfTimer
 /// </summary>
 public class TimingScope : IDisposable
 {
-    private readonly string _operationName;
-    private readonly Stopwatch _sw;
+    private readonly string m_operationName;
+    private readonly Stopwatch m_sw;
 
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    /// <param name="operationName">操作名称</param>
     public TimingScope(string operationName)
     {
-        _operationName = operationName;
-        _sw = Stopwatch.StartNew();
+        m_operationName = operationName;
+        m_sw = Stopwatch.StartNew();
     }
 
-    public TimeSpan Elapsed => _sw.Elapsed;
+    /// <summary>
+    /// 已耗时
+    /// </summary>
+    public TimeSpan Elapsed => m_sw.Elapsed;
 
+    /// <inheritdoc/>
     public void Dispose()
     {
-        _sw.Stop();
-        Logging.Log.Debug("[Timing] {Operation} completed in {Elapsed}ms", _operationName, _sw.ElapsedMilliseconds);
+        m_sw.Stop();
+        Logging.Log.Debug("[Timing] {Operation} completed in {Elapsed}ms", m_operationName, m_sw.ElapsedMilliseconds);
     }
 }

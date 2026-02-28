@@ -13,10 +13,13 @@ namespace GameImpact.OCR;
 /// <summary>
 /// 基于 Windows.Media.Ocr 的 OCR 引擎实现
 /// </summary>
+/// <summary>
+/// 基于 Windows.Media.Ocr 的 OCR 引擎实现
+/// </summary>
 public class WindowsOcrEngine : IOcrEngine
 {
-    private readonly WinOcr.OcrEngine _engine;
-    private bool _disposed;
+    private readonly WinOcr.OcrEngine m_engine;
+    private bool m_disposed;
 
     /// <summary>
     /// 创建 Windows OCR 引擎
@@ -29,17 +32,20 @@ public class WindowsOcrEngine : IOcrEngine
         if (!WinOcr.OcrEngine.IsLanguageSupported(lang))
             throw new NotSupportedException($"Language '{language}' is not supported. Install it in Windows Settings > Language.");
         
-        _engine = WinOcr.OcrEngine.TryCreateFromLanguage(lang) 
+        m_engine = WinOcr.OcrEngine.TryCreateFromLanguage(lang) 
             ?? throw new InvalidOperationException($"Failed to create OCR engine for '{language}'");
     }
 
     /// <inheritdoc/>
     public List<OcrResult> Recognize(Mat image)
     {
-        if (image.Empty()) return [];
+        if (image.Empty())
+        {
+            return [];
+        }
 
         using var bitmap = MatToSoftwareBitmap(image);
-        var result = _engine.RecognizeAsync(bitmap).AsTask().GetAwaiter().GetResult();
+        var result = m_engine.RecognizeAsync(bitmap).AsTask().GetAwaiter().GetResult();
         
         return ConvertResult(result);
     }
@@ -121,7 +127,9 @@ public class WindowsOcrEngine : IOcrEngine
         finally
         {
             if (needDispose)
+            {
                 bgra.Dispose();
+            }
         }
     }
 
@@ -166,10 +174,14 @@ public class WindowsOcrEngine : IOcrEngine
         return results;
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (m_disposed)
+        {
+            return;
+        }
+        m_disposed = true;
         GC.SuppressFinalize(this);
     }
 }

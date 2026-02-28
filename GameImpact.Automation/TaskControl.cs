@@ -25,7 +25,9 @@ public static class TaskControl
         {
             ct.ThrowIfCancellationRequested();
             if (sw.ElapsedMilliseconds > timeoutMs)
+            {
                 throw new TimeoutException("Wait condition timeout");
+            }
             await Task.Delay(checkIntervalMs, ct);
         }
     }
@@ -37,9 +39,13 @@ public static class TaskControl
             ct.ThrowIfCancellationRequested();
             var result = await action();
             if (successCondition(result))
+            {
                 return result;
+            }
             if (i < maxRetries - 1)
+            {
                 await Task.Delay(delayMs, ct);
+            }
         }
         throw new InvalidOperationException($"Retry failed after {maxRetries} attempts");
     }

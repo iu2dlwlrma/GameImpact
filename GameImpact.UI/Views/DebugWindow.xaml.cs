@@ -11,36 +11,51 @@ namespace GameImpact.UI.Views;
 /// </summary>
 public partial class DebugWindow : Window
 {
-    private readonly MainModel model;
-    private bool _isCapturingKey;
-    private Key _capturedKey = Key.None;
-    private ModifierKeys _capturedModifiers = ModifierKeys.None;
-    private readonly List<string> _templateFiles = new();
+    private readonly MainModel m_model;
+    private bool m_isCapturingKey;
+    private Key m_capturedKey = Key.None;
+    private ModifierKeys m_capturedModifiers = ModifierKeys.None;
+    private readonly List<string> m_templateFiles = new();
 
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    /// <param name="model">主视图模型</param>
     public DebugWindow(MainModel model)
     {
         InitializeComponent();
-        this.model = model;
+        m_model = model;
         DataContext = model;
         Loaded += (_, _) => RefreshTemplateList();
     }
 
+    /// <summary>
+    /// 刷新模板列表
+    /// </summary>
     private void RefreshTemplateList()
     {
-        _templateFiles.Clear();
-        _templateFiles.AddRange(model.GetTemplateFileNames());
+        m_templateFiles.Clear();
+        m_templateFiles.AddRange(m_model.GetTemplateFileNames());
         TemplateListCombo.ItemsSource = null;
-        TemplateListCombo.ItemsSource = _templateFiles;
-        if (_templateFiles.Count > 0 && TemplateListCombo.SelectedIndex < 0)
+        TemplateListCombo.ItemsSource = m_templateFiles;
+        if (m_templateFiles.Count > 0 && TemplateListCombo.SelectedIndex < 0)
+        {
             TemplateListCombo.SelectedIndex = 0;
+        }
     }
 
+    /// <summary>
+    /// 截图工具按钮点击事件处理
+    /// </summary>
     private void ScreenshotTool_Click(object sender, RoutedEventArgs e)
     {
-        model.StartScreenshotTool(RefreshTemplateList);
+        m_model.StartScreenshotTool(RefreshTemplateList);
         AppendInputLog("请在目标窗口上拖拽框选区域，或按 ESC 取消");
     }
 
+    /// <summary>
+    /// 模板匹配按钮点击事件处理
+    /// </summary>
     private void MatchTemplate_Click(object sender, RoutedEventArgs e)
     {
         var selected = TemplateListCombo.SelectedItem as string;
@@ -50,7 +65,7 @@ public partial class DebugWindow : Window
             return;
         }
 
-        var (found, x, y, conf) = model.MatchWithTemplate(selected);
+        var (found, x, y, conf) = m_model.MatchWithTemplate(selected);
         if (found)
         {
             AppendInputLog($"模板匹配: '{selected}' 中心=({x},{y}) 置信度={conf:P0}");
@@ -58,25 +73,35 @@ public partial class DebugWindow : Window
             MouseY.Text = y.ToString();
         }
         else
+        {
             AppendInputLog($"未匹配到模板: '{selected}'");
+        }
     }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.LeftButton == MouseButtonState.Pressed)
+        {
             DragMove();
+        }
     }
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
+    /// <summary>
+    /// 清除日志按钮点击事件处理
+    /// </summary>
     private void ClearLog_Click(object sender, RoutedEventArgs e)
     {
-        model.ClearLog();
+        m_model.ClearLog();
     }
 
+    /// <summary>
+    /// 拾取坐标按钮点击事件处理
+    /// </summary>
     private void PickCoord_Click(object sender, RoutedEventArgs e)
     {
-        model.StartPickCoord((x, y) =>
+        m_model.StartPickCoord((x, y) =>
         {
             Dispatcher.Invoke(() =>
             {
@@ -87,12 +112,15 @@ public partial class DebugWindow : Window
         });
     }
 
+    /// <summary>
+    /// 测试鼠标点击按钮点击事件处理
+    /// </summary>
     private void TestMouseClick_Click(object sender, RoutedEventArgs e)
     {
         if (int.TryParse(MouseX.Text, out int x) && int.TryParse(MouseY.Text, out int y))
         {
             AppendInputLog($"鼠标点击: ({x}, {y})");
-            model.TestMouseClick(x, y);
+            m_model.TestMouseClick(x, y);
         }
         else
         {
@@ -100,12 +128,15 @@ public partial class DebugWindow : Window
         }
     }
 
+    /// <summary>
+    /// 测试鼠标移动按钮点击事件处理
+    /// </summary>
     private void TestMouseMove_Click(object sender, RoutedEventArgs e)
     {
         if (int.TryParse(MouseX.Text, out int x) && int.TryParse(MouseY.Text, out int y))
         {
             AppendInputLog($"鼠标移动: ({x}, {y})");
-            model.TestMouseMove(x, y);
+            m_model.TestMouseMove(x, y);
         }
         else
         {
@@ -113,11 +144,14 @@ public partial class DebugWindow : Window
         }
     }
 
+    /// <summary>
+    /// 按键捕获区域鼠标按下事件处理
+    /// </summary>
     private void KeyCapture_MouseDown(object sender, MouseButtonEventArgs e)
     {
-        _isCapturingKey = true;
-        _capturedKey = Key.None;
-        _capturedModifiers = ModifierKeys.None;
+        m_isCapturingKey = true;
+        m_capturedKey = Key.None;
+        m_capturedModifiers = ModifierKeys.None;
         KeyCaptureText.Text = "请按下按键...";
         KeyCaptureText.Foreground = (System.Windows.Media.Brush)FindResource("AppAccent");
         KeyCaptureBorder.BorderBrush = (System.Windows.Media.Brush)FindResource("AppAccent");
@@ -125,9 +159,15 @@ public partial class DebugWindow : Window
         e.Handled = true;
     }
 
+    /// <summary>
+    /// 按键捕获区域按键按下事件处理
+    /// </summary>
     private void KeyCapture_KeyDown(object sender, KeyEventArgs e)
     {
-        if (!_isCapturingKey) return;
+        if (!m_isCapturingKey)
+        {
+            return;
+        }
 
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
 
@@ -137,18 +177,18 @@ public partial class DebugWindow : Window
             Key.LeftAlt or Key.RightAlt or
             Key.LWin or Key.RWin)
         {
-            _capturedModifiers = Keyboard.Modifiers;
+            m_capturedModifiers = Keyboard.Modifiers;
             KeyCaptureText.Text = FormatKeyDisplay(ModifierKeys.None, key) + " + ...";
             e.Handled = true;
             return;
         }
 
         // 捕获到实际按键
-        _capturedModifiers = Keyboard.Modifiers;
-        _capturedKey = key;
-        _isCapturingKey = false;
+        m_capturedModifiers = Keyboard.Modifiers;
+        m_capturedKey = key;
+        m_isCapturingKey = false;
 
-        var displayText = FormatKeyDisplay(_capturedModifiers, _capturedKey);
+        var displayText = FormatKeyDisplay(m_capturedModifiers, m_capturedKey);
         KeyCaptureText.Text = displayText;
         KeyCaptureText.Foreground = (System.Windows.Media.Brush)FindResource("AppText");
         KeyCaptureBorder.BorderBrush = (System.Windows.Media.Brush)FindResource("AppBorderSubtle");
@@ -157,12 +197,15 @@ public partial class DebugWindow : Window
         e.Handled = true;
     }
 
+    /// <summary>
+    /// 按键捕获区域失去焦点事件处理
+    /// </summary>
     private void KeyCapture_LostFocus(object sender, RoutedEventArgs e)
     {
-        if (_isCapturingKey)
+        if (m_isCapturingKey)
         {
-            _isCapturingKey = false;
-            if (_capturedKey == Key.None)
+            m_isCapturingKey = false;
+            if (m_capturedKey == Key.None)
             {
                 KeyCaptureText.Text = "点击捕获按键";
                 KeyCaptureText.Foreground = (System.Windows.Media.Brush)FindResource("AppTextMuted");
@@ -209,19 +252,25 @@ public partial class DebugWindow : Window
         return string.Join(" + ", parts);
     }
 
+    /// <summary>
+    /// 测试按键发送按钮点击事件处理
+    /// </summary>
     private void TestKeyPress_Click(object sender, RoutedEventArgs e)
     {
-        if (_capturedKey == Key.None)
+        if (m_capturedKey == Key.None)
         {
             AppendInputLog("错误: 请先捕获按键");
             return;
         }
 
-        var displayText = FormatKeyDisplay(_capturedModifiers, _capturedKey);
+        var displayText = FormatKeyDisplay(m_capturedModifiers, m_capturedKey);
         AppendInputLog($"按键发送: {displayText}");
-        model.TestKeyPress(_capturedKey, _capturedModifiers);
+        m_model.TestKeyPress(m_capturedKey, m_capturedModifiers);
     }
 
+    /// <summary>
+    /// OCR查找按钮点击事件处理
+    /// </summary>
     private void TestOcrFind_Click(object sender, RoutedEventArgs e)
     {
         var searchText = OcrSearchText.Text?.Trim();
@@ -231,7 +280,7 @@ public partial class DebugWindow : Window
             return;
         }
 
-        var result = model.FindText(searchText);
+        var result = m_model.FindText(searchText);
         if (result.HasValue)
         {
             MouseX.Text = result.Value.x.ToString();
@@ -244,9 +293,12 @@ public partial class DebugWindow : Window
         }
     }
 
+    /// <summary>
+    /// OCR全屏识别按钮点击事件处理
+    /// </summary>
     private void TestOcrFull_Click(object sender, RoutedEventArgs e)
     {
-        var results = model.RecognizeFullScreen();
+        var results = m_model.RecognizeFullScreen();
         if (results != null && results.Count > 0)
         {
             AppendInputLog($"识别到 {results.Count} 个文本区域:");
@@ -255,7 +307,9 @@ public partial class DebugWindow : Window
                 AppendInputLog($"  [{r.x},{r.y}] {r.text}");
             }
             if (results.Count > 10)
+            {
                 AppendInputLog($"  ... 还有 {results.Count - 10} 个");
+            }
         }
         else
         {
@@ -268,6 +322,8 @@ public partial class DebugWindow : Window
         var line = $"[{DateTime.Now:HH:mm:ss}] {message}\n";
         InputTestLog.Text = line + InputTestLog.Text;
         if (InputTestLog.Text.Length > 5000)
+        {
             InputTestLog.Text = InputTestLog.Text[..5000];
+        }
     }
 }

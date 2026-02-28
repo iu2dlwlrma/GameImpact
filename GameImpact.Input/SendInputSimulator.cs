@@ -19,9 +19,12 @@ public enum KeyboardInputMode
     PostMessage,
 }
 
+/// <summary>
+/// 基于 Windows SendInput 和 PostMessage API 的输入模拟器实现
+/// </summary>
 public partial class SendInputSimulator : IInputSimulator
 {
-    private nint _hWnd;
+    private nint m_hWnd;
 
     public IKeyboardInput Keyboard => this;
     public IMouseInput Mouse => this;
@@ -35,19 +38,32 @@ public partial class SendInputSimulator : IInputSimulator
     /// <summary>
     /// 设置后台操作的目标窗口句柄。
     /// </summary>
+    /// <param name="windowHandle">目标窗口句柄</param>
     public void SetWindowHandle(nint windowHandle)
     {
-        _hWnd = windowHandle;
+        m_hWnd = windowHandle;
     }
 
+    /// <summary>
+    /// 发送输入事件
+    /// </summary>
+    /// <param name="input">输入事件结构</param>
+    /// <returns>成功发送的事件数量</returns>
     private static uint SendInputEvent(NativeMethods.Input input)
     {
         var result = NativeMethods.SendInput(1, [input], NativeMethods.Input.Size);
         if (result == 0)
+        {
             LogWin32Error("[SendInput] Failed");
+        }
         return result;
     }
 
+    /// <summary>
+    /// 记录 Win32 错误日志
+    /// </summary>
+    /// <param name="message">错误消息模板</param>
+    /// <param name="args">消息参数</param>
     private static void LogWin32Error(string message, params object[] args)
     {
         var error = Marshal.GetLastWin32Error();

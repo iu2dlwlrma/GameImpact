@@ -19,7 +19,7 @@ namespace GameImpact.UI;
 /// </summary>
 public abstract class GameImpactApp : Application
 {
-    private IHost? _host;
+    private IHost? m_host;
 
     /// <summary>
     /// 应用显示名称，用于窗口标题和日志前缀。子类覆写此属性自定义名称。
@@ -29,7 +29,7 @@ public abstract class GameImpactApp : Application
     /// <summary>
     /// DI 容器
     /// </summary>
-    public IHost Host => _host ?? throw new InvalidOperationException("Host 尚未初始化");
+    public IHost Host => m_host ?? throw new InvalidOperationException("Host 尚未初始化");
 
     /// <summary>
     /// 子类覆写以注册自己的服务。
@@ -94,7 +94,7 @@ public abstract class GameImpactApp : Application
                 .CreateLogger();
 
         // 构建 Host
-        _host = Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
+        m_host = Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
                 .UseSerilog()
                 .ConfigureServices((_, services) =>
                 {
@@ -112,23 +112,23 @@ public abstract class GameImpactApp : Application
                 .Build();
 
         // 初始化日志
-        var loggerFactory = _host.Services.GetRequiredService<ILoggerFactory>();
+        var loggerFactory = m_host.Services.GetRequiredService<ILoggerFactory>();
         AppLog.Initialize(loggerFactory);
 
         // 从设置中加载主题
-        var appSettingsProvider = _host.Services.GetRequiredService<ISettingsProvider<AppSettings>>();
+        var appSettingsProvider = m_host.Services.GetRequiredService<ISettingsProvider<AppSettings>>();
         var appSettings = appSettingsProvider.Load();
         ThemeService.Instance.SetTheme(appSettings.Theme);
 
         AppLog.Info("{AppName} starting...", AppName);
-        await _host.StartAsync();
+        await m_host.StartAsync();
 
         // 创建并显示 Shell 主窗口
-        var mainWindow = _host.Services.GetRequiredService<MainWindow>();
+        var mainWindow = m_host.Services.GetRequiredService<MainWindow>();
         mainWindow.ShellTitle = AppName;
 
         // 获取子类提供的内容视图
-        var contentView = CreateContentView(_host.Services);
+        var contentView = CreateContentView(m_host.Services);
         if (contentView != null)
         {
             mainWindow.SetContentView(contentView);
@@ -140,7 +140,7 @@ public abstract class GameImpactApp : Application
             var pages = new List<SettingsPage>();
 
             // 构建应用设置页签（按分组自动拆分子页签）
-            var settingsProvider = _host.Services.GetRequiredService<ISettingsProvider<AppSettings>>();
+            var settingsProvider = m_host.Services.GetRequiredService<ISettingsProvider<AppSettings>>();
             var appPage = SettingsPageBuilder.Build<AppSettings>(
                 settingsProvider,
                 title: "应用设置",
@@ -156,7 +156,7 @@ public abstract class GameImpactApp : Application
             pages.Add(appPage);
 
             // 获取子类提供的项目设置页签
-            var projectPages = CreateProjectSettingsPages(_host.Services);
+            var projectPages = CreateProjectSettingsPages(m_host.Services);
             pages.AddRange(projectPages);
 
             return new SettingsWindow(pages);
@@ -167,13 +167,16 @@ public abstract class GameImpactApp : Application
         AppLog.Info("{AppName} started", AppName);
     }
 
+    /// <summary>
+    /// 应用退出事件处理
+    /// </summary>
     protected override async void OnExit(ExitEventArgs e)
     {
         AppLog.Info("{AppName} exiting...", AppName);
-        if (_host != null)
+        if (m_host != null)
         {
-            await _host.StopAsync();
-            _host.Dispose();
+            await m_host.StopAsync();
+            m_host.Dispose();
         }
 
         await Log.CloseAndFlushAsync();

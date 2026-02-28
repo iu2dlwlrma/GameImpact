@@ -271,18 +271,9 @@ public class AutoSettingsView<T> : UserControl where T : class, new()
         var comboBox = new ComboBox {
                 Width = 160,
                 MinHeight = 30,
-                HorizontalAlignment = HorizontalAlignment.Right
-        };
-
-        // 兜底：部分宿主环境下默认点击链路可能失效，手动触发展开下拉框
-        comboBox.PreviewMouseLeftButtonDown += (_, e) =>
-        {
-            if (!comboBox.IsDropDownOpen)
-            {
-                comboBox.Focus();
-                comboBox.IsDropDownOpen = true;
-                e.Handled = true;
-            }
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Focusable = true,
+                IsEditable = false
         };
 
         var propType = meta.Property.PropertyType;

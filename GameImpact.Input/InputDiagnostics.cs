@@ -25,7 +25,9 @@ public static class InputDiagnostics
             foreach (ProcessModule mod in process.Modules)
             {
                 if (mod.ModuleName is { } name && mod.FileName is { } path)
+                {
                     modules.Add((name, path));
+                }
             }
 
             // 按模块名排序，便于阅读
@@ -38,7 +40,9 @@ public static class InputDiagnostics
                         || path.StartsWith(Environment.GetFolderPath(Environment.SpecialFolder.Windows), StringComparison.OrdinalIgnoreCase)
                         || path.Contains("Microsoft.NET", StringComparison.OrdinalIgnoreCase);
                 if (!isLikelySystem)
+                {
                     Log.Info("[InputDiagnostics] Loaded: {Module} -> {Path}", name, path);
+                }
             }
 
             // 常见“嫌疑”关键字，单独提醒（排除误报如 DependencyInjection）
@@ -62,7 +66,9 @@ public static class InputDiagnostics
             {
                 Log.Warn("[InputDiagnostics] Possible input-related modules (may hook mouse/kb): {Count}", suspects.Count);
                 foreach (var (name, path) in suspects)
+                {
                     Log.Warn("[InputDiagnostics]   -> {Module}: {Path}", name, path);
+                }
             }
         }
         catch (Exception ex)

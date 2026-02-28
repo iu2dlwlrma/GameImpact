@@ -16,12 +16,12 @@ namespace GameImpact.Capture;
 public static class Direct3D11Helper
 {
     private static readonly Guid ID3D11Texture2D = new("6f15aaf2-d208-4e89-9ab4-489535d34f9c");
-    private static Device? _sharedDevice;
+    private static Device? s_sharedDevice;
 
     /// <summary>
     /// 获取共享的 SharpDX Device（用于 GPU HDR 转换等操作）
     /// </summary>
-    public static Device? SharedDevice => _sharedDevice;
+    public static Device? SharedDevice => s_sharedDevice;
 
     /// <summary>
     /// 检测窗口所在显示器是否开启了 HDR
@@ -78,13 +78,13 @@ public static class Direct3D11Helper
     /// <returns>WinRT IDirect3DDevice 接口</returns>
     public static IDirect3DDevice CreateDevice(bool useWarp = false)
     {
-        if (_sharedDevice == null || _sharedDevice.IsDisposed)
+        if (s_sharedDevice == null || s_sharedDevice.IsDisposed)
         {
-            _sharedDevice = new Device(
+            s_sharedDevice = new Device(
                 useWarp ? SharpDX.Direct3D.DriverType.Software : SharpDX.Direct3D.DriverType.Hardware,
                 DeviceCreationFlags.BgraSupport);
         }
-        return CreateDirect3DDeviceFromSharpDXDevice(_sharedDevice);
+        return CreateDirect3DDeviceFromSharpDXDevice(s_sharedDevice);
     }
 
     /// <summary>
@@ -122,16 +122,22 @@ public static class Direct3D11Helper
     public static bool FillMat(this Texture2D staging, Device device, Texture2D source, Mat destMat, ResourceRegion? region = null)
     {
         if (device.IsDisposed || device.DeviceRemovedReason.Code != 0)
+        {
             return false;
+        }
 
         try
         {
             var ctx = device.ImmediateContext;
 
             if (region != null)
+            {
                 ctx.CopySubresourceRegion(source, 0, region, staging, 0, 0, 0, 0);
+            }
             else
+            {
                 ctx.CopyResource(staging, source);
+            }
 
             var dataBox = ctx.MapSubresource(staging, 0, MapMode.Read, SharpDX.Direct3D11.MapFlags.None);
             try
@@ -140,9 +146,13 @@ public static class Direct3D11Helper
                 int h = staging.Description.Height;
 
                 if (staging.Description.Format == Format.R16G16B16A16_Float)
+                {
                     ConvertHdrToBgra(dataBox, destMat, w, h);
+                }
                 else
+                {
                     CopyBgra(dataBox, destMat, w, h);
+                }
 
                 return true;
             }
