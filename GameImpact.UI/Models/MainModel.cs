@@ -2,12 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -15,8 +9,8 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GameImpact.Abstractions.Input;
-using GameImpact.Abstractions.Recognition;
 using GameImpact.Core;
+using GameImpact.Core.Services;
 using GameImpact.Core.Windowing;
 using GameImpact.UI.Services;
 using GameImpact.UI.Views;
@@ -32,13 +26,14 @@ namespace GameImpact.UI
     public partial class MainModel : ObservableObject
     {
         private readonly GameContext m_context;
-        private readonly CapturePreviewController m_previewController;
-        private readonly IOverlayUiService m_overlay;
-        private readonly DebugInteractionService m_debug;
-        private readonly TemplateService m_templates;
-        private readonly IWindowEnumerator m_windowEnumerator;
+        private readonly IDebugActionsService m_debugActions;
         private readonly Queue<string> m_logQueue = new();
         private readonly DispatcherTimer m_logTimer;
+        private readonly IOverlayUiService m_overlay;
+        private readonly CapturePreviewController m_previewController;
+        private readonly ITemplateMatchService m_templateMatch;
+        private readonly ITemplateService m_templates;
+        private readonly IWindowEnumerator m_windowEnumerator;
         [ObservableProperty] private bool _autoScrollLog = true;
         [ObservableProperty] private string _captureButtonText = "启动";
         [ObservableProperty] private bool _enablePreview = true;
@@ -61,29 +56,31 @@ namespace GameImpact.UI
         private string m_windowTitle = "";
 
         /// <summary>构造函数</summary>
-        /// <param name="context">游戏上下文</param>
-        /// <param name="windowEnumerator">窗口枚举器</param>
-        public MainModel(GameContext context, IWindowEnumerator windowEnumerator)
+        public MainModel(GameContext context,
+                IWindowEnumerator windowEnumerator,
+                ITemplateService templates,
+                ITemplateMatchService templateMatch,
+                IDebugActionsService debugActions,
+                ICapturePreviewProvider previewProvider,
+                IOverlayUiService overlay)
         {
             m_context = context;
-            m_previewController = new CapturePreviewController(context);
-            m_previewController.PreviewUpdated += SyncPreviewFromController;
-            m_overlay = OverlayUiService.Instance;
-            m_debug = new DebugInteractionService(context, m_overlay);
-            m_templates = new TemplateService();
             m_windowEnumerator = windowEnumerator;
+            m_templates = templates;
+            m_templateMatch = templateMatch;
+            m_debugActions = debugActions;
+            m_overlay = overlay;
+            m_previewController = new CapturePreviewController(previewProvider);
+            m_previewController.PreviewUpdated += SyncPreviewFromController;
 
             m_logTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
             m_logTimer.Tick += OnLogTick;
-
-            // 监听屏幕日志（业务关键信息）
             Log.OnScreenLogMessage += OnScreenLogReceived;
             m_logTimer.Start();
         }
 
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool SetForegroundWindow(nint hWnd);
+        /// <summary>模板文件夹路径（供 Debug 等 UI 使用）。</summary>
+        public string TemplatesFolderPath => m_templates.TemplatesFolderPath;
 
         /// <summary>接收日志消息（仅DEBUG模式）</summary>
         /// <param name="level">日志级别</param>
@@ -151,14 +148,14 @@ namespace GameImpact.UI
         private void SelectWindow()
         {
             var dialog = new WindowSelectDialog(m_windowEnumerator);
-            
+
             // 设置 Owner 为主窗口，使对话框居中显示
             var mainWindow = Application.Current.MainWindow;
             if (mainWindow != null)
             {
                 dialog.Owner = mainWindow;
             }
-            
+
             if (dialog.ShowDialog() == true && dialog.SelectedWindow != null)
             {
                 var window = dialog.SelectedWindow;
@@ -273,46 +270,86 @@ namespace GameImpact.UI
 
         public async void TestMouseClick(int x, int y)
         {
-            await m_debug.MouseClickAsync(x, y);
+            var success = await m_debugActions.MouseClickAsync(x, y);
+            m_overlay.DrawClickMarker(x, y, success);
         }
 
         public async void TestMouseMove(int x, int y)
         {
-            await m_debug.MouseMoveAsync(x, y);
+            await m_debugActions.MouseMoveAsync(x, y);
         }
 
         public async void TestKeyPress(string key)
         {
-            await m_debug.KeyPressAsync(key);
+            await m_debugActions.KeyPressAsync(key);
         }
 
         /// <summary>发送按键（支持组合键），从 WPF Key + ModifierKeys 转换为 VirtualKey</summary>
         public async void TestKeyPress(Key wpfKey, ModifierKeys modifiers)
         {
-            await m_debug.KeyPressAsync(wpfKey, modifiers);
+            var vk = WpfKeyToVirtualKey(wpfKey);
+            var modList = new List<VirtualKey>();
+            if (modifiers.HasFlag(ModifierKeys.Control))
+            {
+                modList.Add(VirtualKey.Control);
+            }
+            if (modifiers.HasFlag(ModifierKeys.Alt))
+            {
+                modList.Add(VirtualKey.Menu);
+            }
+            if (modifiers.HasFlag(ModifierKeys.Shift))
+            {
+                modList.Add(VirtualKey.Shift);
+            }
+            await m_debugActions.KeyPressAsync(vk, modList.Count > 0 ? modList : null);
+        }
+
+        private static VirtualKey WpfKeyToVirtualKey(Key wpfKey)
+        {
+            var vkCode = KeyInterop.VirtualKeyFromKey(wpfKey);
+            if (vkCode == 0)
+            {
+                return VirtualKey.None;
+            }
+            return Enum.IsDefined(typeof(VirtualKey), (ushort)vkCode) ? (VirtualKey)(ushort)vkCode : VirtualKey.None;
         }
 
         public string? TestOcr(int x, int y, int width, int height)
         {
-            return m_debug.TestOcr(x, y, width, height);
+            var (text, roi, drawResults) = m_debugActions.TestOcr(x, y, width, height);
+            if (drawResults.Count > 0)
+            {
+                m_overlay.DrawOcrResult(roi, drawResults);
+            }
+            return text;
         }
 
         /// <summary>在整个窗口中查找指定文本，返回中心坐标</summary>
         public (int x, int y)? FindText(string searchText)
         {
-            return m_debug.FindText(searchText);
+            var (center, fullRoi, matchForDraw) = m_debugActions.FindText(searchText);
+            if (matchForDraw.HasValue)
+            {
+                m_overlay.DrawOcrResult(fullRoi, [(matchForDraw.Value.box, matchForDraw.Value.text)]);
+            }
+            return center;
         }
 
         /// <summary>识别整个窗口的文字</summary>
         public List<(int x, int y, string text)>? RecognizeFullScreen()
         {
-            return m_debug.RecognizeFullScreen();
+            var (list, fullRoi, drawResults) = m_debugActions.RecognizeFullScreen();
+            if (drawResults.Count > 0)
+            {
+                m_overlay.DrawOcrResult(fullRoi, drawResults);
+            }
+            return list;
         }
 
         /// <summary>启动截图工具：在目标窗口上框选区域，截取后弹出命名对话框保存到模板文件夹。</summary>
         public void StartScreenshotTool(Action? onSaved = null)
         {
-            if (!IsCapturing || m_context.Capture == null)
+            if (!IsCapturing)
             {
                 Log.WarnScreen("[截图] 请先启动捕获");
                 return;
@@ -325,41 +362,23 @@ namespace GameImpact.UI
                     Log.InfoScreen("[截图] 已取消");
                     return;
                 }
-
                 try
                 {
-                    var frame = m_context.Capture.Capture();
-                    if (frame == null)
+                    var crop = m_templateMatch.CaptureRegion(x, y, w, h);
+                    if (crop == null)
                     {
-                        Log.WarnScreen("[截图] 无法获取帧");
                         return;
                     }
-
-                    using (frame)
+                    try
                     {
-                        if (x + w > frame.Width || y + h > frame.Height)
+                        Application.Current.Dispatcher.Invoke(() =>
                         {
-                            Log.WarnScreen("[截图] 选区超出边界");
-                            return;
-                        }
-
-                        var roi = new Rect(x, y, w, h);
-                        // 克隆 Mat，因为需要在对话框中使用
-                        var crop = new Mat(frame, roi).Clone();
-                        
-                        try
-                        {
-                            // 在 UI 线程上显示对话框（同步调用以确保 Mat 在使用期间不被释放）
-                            Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                ShowScreenshotNameDialog(crop, onSaved);
-                            });
-                        }
-                        finally
-                        {
-                            // 对话框关闭后释放 Mat
-                            crop.Dispose();
-                        }
+                            ShowScreenshotNameDialog(crop, onSaved);
+                        });
+                    }
+                    finally
+                    {
+                        crop.Dispose();
                     }
                 }
                 catch (Exception ex)
@@ -376,7 +395,7 @@ namespace GameImpact.UI
             {
                 var defaultFileName = $"template_{DateTime.Now:yyyyMMdd_HHmmss}";
                 var dialog = new ScreenshotNameDialog(screenshot, defaultFileName);
-                
+
                 // 设置对话框的所有者窗口
                 var mainWindow = Application.Current.MainWindow;
                 if (mainWindow != null)
@@ -414,153 +433,47 @@ namespace GameImpact.UI
             return m_templates.GetTemplateFileNames();
         }
 
+        public string GetTemplatePath(string fileName)
+        {
+            return m_templates.GetTemplatePath(fileName);
+        }
+        public (Rect? matchRoi, Rect? textRoi) LoadTemplateRoi(string templateFileName)
+        {
+            return m_templates.LoadTemplateRoi(templateFileName);
+        }
+        public void SaveTemplateRoi(string templateFileName, Rect? matchRoi, Rect? textRoi)
+        {
+            m_templates.SaveTemplateRoi(templateFileName, matchRoi, textRoi);
+        }
+
         /// <summary>用当前画面与指定模板匹配，返回是否找到及中心坐标、置信度。</summary>
         public (bool found, int centerX, int centerY, double confidence) MatchWithTemplate(string? fileName)
         {
-            var result = MatchWithTemplateAndText(fileName, null);
-            return (result.found, result.centerX, result.centerY, result.confidence);
+            var r = m_templateMatch.MatchWithTemplateAndText(fileName);
+            if (r.Found)
+            {
+                m_overlay.DrawOcrResult(r.MatchDraw.roi, r.MatchDraw.draw);
+                if (r.TextDraw.HasValue)
+                {
+                    m_overlay.DrawOcrResult(r.TextDraw.Value.roi, r.TextDraw.Value.draw);
+                }
+            }
+            return (r.Found, r.CenterX, r.CenterY, r.Confidence);
         }
 
         /// <summary>用当前画面与指定模板匹配，并提取文字区域进行OCR识别。返回是否找到、中心坐标、置信度和识别的文字。</summary>
-        /// <param name="fileName">模板文件名</param>
-        /// <param name="textRegion">文字区域（相对于匹配位置的偏移和大小），null表示不识别文字</param>
-        /// <returns>(是否找到, 中心X, 中心Y, 置信度, 识别的文字)</returns>
-        public (bool found, int centerX, int centerY, double confidence, string? text) MatchWithTemplateAndText(
-            string? fileName, 
-            Rect? textRegion = null)
+        public (bool found, int centerX, int centerY, double confidence, string? text) MatchWithTemplateAndText(string? fileName, Rect? textRegion = null)
         {
-            if (string.IsNullOrEmpty(fileName))
+            var r = m_templateMatch.MatchWithTemplateAndText(fileName, textRegion);
+            if (r.Found)
             {
-                return (false, 0, 0, 0, null);
-            }
-            if (!IsCapturing || m_context.Capture == null)
-            {
-                Log.WarnScreen("[识别] 请先启动捕获");
-                return (false, 0, 0, 0, null);
-            }
-
-            var path = m_templates.GetTemplatePath(fileName);
-            if (!File.Exists(path))
-            {
-                Log.WarnScreen("[识别] 模板不存在: {File}", fileName);
-                return (false, 0, 0, 0, null);
-            }
-
-            try
-            {
-                // 自动加载与模板同名的 ROI 配置（*.roi.json）
-                Rect? matchRoi = null;
-                Rect? textRoiFromConfig = null;
-                try
+                m_overlay.DrawOcrResult(r.MatchDraw.roi, r.MatchDraw.draw);
+                if (r.TextDraw.HasValue)
                 {
-                    var baseName = Path.GetFileNameWithoutExtension(fileName);
-                    var (match, text) = m_templates.LoadTemplateRoi(fileName);
-                    matchRoi = match;
-                    textRoiFromConfig = text;
-                }
-                catch (Exception ex)
-                {
-                    // ROI 配置解析失败不影响匹配流程，只做调试日志
-                    Log.DebugScreen("[识别] 读取 ROI 配置失败: {Error}", ex.Message);
-                }
-
-                // 如果调用方未显式传入文字区域，但配置中存在 TextRoi，则自动使用
-                if (!textRegion.HasValue && textRoiFromConfig.HasValue)
-                {
-                    textRegion = textRoiFromConfig;
-                }
-
-                using var template = Cv2.ImRead(path);
-                if (template.Empty())
-                {
-                    Log.WarnScreen("[识别] 无法读取模板: {File}", fileName);
-                    return (false, 0, 0, 0, null);
-                }
-
-                var frame = m_context.Capture.Capture();
-                if (frame == null)
-                {
-                    Log.WarnScreen("[识别] 无法获取当前帧");
-                    return (false, 0, 0, 0, null);
-                }
-
-                using (frame)
-                {
-                    // 使用边缘检测匹配，忽略背景颜色和特效，只关注形状轮廓；
-                    // 如存在 MatchRoi 配置，则只在模板的该区域内进行匹配
-                    var matchOptions = new MatchOptions(
-                        Threshold: 0.6, // 边缘检测匹配可能需要较低的阈值
-                        TemplateRegionOfInterest: matchRoi,
-                        UseEdgeMatch: true,
-                        CannyThreshold1: 50,
-                        CannyThreshold2: 150
-                    );
-                    var result = m_context.Recognition.MatchTemplate(frame, template, matchOptions);
-                    if (result.Success)
-                    {
-                        var rect = new Rect(result.Location.X, result.Location.Y, result.Size.Width, result.Size.Height);
-                        m_overlay.DrawOcrResult(rect, [(new Rect(0, 0, result.Size.Width, result.Size.Height), $"匹配 {result.Confidence:P0}")]);
-                        Log.InfoScreen("[识别] 找到模板 '{File}' 中心=({X},{Y}) 置信度={Conf:P0}", fileName, result.Center.X, result.Center.Y, result.Confidence);
-                        
-                        // 如果指定了文字区域，提取并识别文字
-                        string? recognizedText = null;
-                        if (textRegion.HasValue)
-                        {
-                            try
-                            {
-                                // 计算文字区域在源图像中的实际位置
-                                var textX = result.Location.X + textRegion.Value.X;
-                                var textY = result.Location.Y + textRegion.Value.Y;
-                                var textWidth = textRegion.Value.Width;
-                                var textHeight = textRegion.Value.Height;
-                                
-                                // 检查边界
-                                if (textX >= 0 && textY >= 0 && 
-                                    textX + textWidth <= frame.Width && 
-                                    textY + textHeight <= frame.Height)
-                                {
-                                    var textRoi = new Rect(textX, textY, textWidth, textHeight);
-                                    var ocrResults = m_context.Ocr.Recognize(frame, textRoi);
-                                    
-                                    if (ocrResults.Count > 0)
-                                    {
-                                        recognizedText = string.Join("", ocrResults.Select(r => r.Text));
-                                        var avgConfidence = ocrResults.Average(r => r.Confidence);
-                                        
-                                        // 在 Overlay 上绘制文字识别结果
-                                        var drawResults = ocrResults.Select(r => (r.BoundingBox, r.Text)).ToList();
-                                        m_overlay.DrawOcrResult(textRoi, drawResults);
-                                        
-                                        Log.InfoScreen("[识别] 提取文字: {Text} (置信度: {Conf:P0})", recognizedText, avgConfidence);
-                                    }
-                                    else
-                                    {
-                                        Log.DebugScreen("[识别] 文字区域未识别到文字");
-                                    }
-                                }
-                                else
-                                {
-                                    Log.WarnScreen("[识别] 文字区域超出边界");
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Log.WarnScreen("[识别] 文字识别失败: {Error}", ex.Message);
-                            }
-                        }
-                        
-                        return (true, result.Center.X, result.Center.Y, result.Confidence, recognizedText);
-                    }
-
-                    Log.InfoScreen("[识别] 未匹配到模板 '{File}'", fileName);
-                    return (false, 0, 0, 0, null);
+                    m_overlay.DrawOcrResult(r.TextDraw.Value.roi, r.TextDraw.Value.draw);
                 }
             }
-            catch (Exception ex)
-            {
-                Log.ErrorScreen(ex, "[识别] 模板匹配失败");
-                return (false, 0, 0, 0, null);
-            }
+            return (r.Found, r.CenterX, r.CenterY, r.Confidence, r.Text);
         }
 
         public void Cleanup()

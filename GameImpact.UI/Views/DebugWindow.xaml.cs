@@ -21,7 +21,6 @@ namespace GameImpact.UI.Views
     public partial class DebugWindow
     {
         private readonly MainModel m_model;
-        private readonly TemplateService m_templates = new();
         private readonly List<string> m_templateFiles = new();
         private Key m_capturedKey = Key.None;
         private ModifierKeys m_capturedModifiers = ModifierKeys.None;
@@ -103,7 +102,7 @@ namespace GameImpact.UI.Views
         {
             try
             {
-                var folderPath = m_templates.TemplatesFolderPath;
+                var folderPath = m_model.TemplatesFolderPath;
                 
                 // 如果文件夹不存在，先创建
                 if (!Directory.Exists(folderPath))
@@ -139,7 +138,7 @@ namespace GameImpact.UI.Views
 
             try
             {
-                var templatePath = m_templates.GetTemplatePath(selected);
+                var templatePath = m_model.GetTemplatePath(selected);
                 if (!File.Exists(templatePath))
                 {
                     AppendInputLog($"错误: 模板文件不存在: {selected}");
@@ -183,7 +182,7 @@ namespace GameImpact.UI.Views
         {
             try
             {
-                m_templates.SaveTemplateRoi(templateFileName, matchRoi, textRoi);
+                m_model.SaveTemplateRoi(templateFileName, matchRoi, textRoi);
             }
             catch (Exception ex)
             {
@@ -196,7 +195,7 @@ namespace GameImpact.UI.Views
         {
             try
             {
-                return m_templates.LoadTemplateRoi(templateFileName);
+                return m_model.LoadTemplateRoi(templateFileName);
             }
             catch (Exception ex)
             {
@@ -209,7 +208,7 @@ namespace GameImpact.UI.Views
         private string GetRoiFilePath(string templateFileName)
         {
             var baseName = Path.GetFileNameWithoutExtension(templateFileName);
-            return Path.Combine(m_templates.TemplatesFolderPath, $"{baseName}.roi.json");
+            return Path.Combine(m_model.TemplatesFolderPath, $"{baseName}.roi.json");
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

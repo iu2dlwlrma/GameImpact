@@ -88,6 +88,8 @@ namespace GameImpact.UI
                     {
                         // 注册核心服务
                         services.AddGameImpact();
+                        // UI 层：Overlay 由 UI 提供，供 MainModel 注入
+                        services.AddSingleton<IOverlayUiService>(_ => OverlayUiService.Instance);
                         // 注册应用设置服务
                         services.AddSingleton<ISettingsProvider<AppSettings>>(
                                 new JsonSettingsProvider<AppSettings>("appsettings.json"));

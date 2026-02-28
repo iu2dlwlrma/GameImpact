@@ -22,6 +22,7 @@
         <PackageReference Include="wpf-ui" Version="4.1.0"/>
     </ItemGroup>
     <ItemGroup>
+        <ProjectReference Include="..\GameImpact.Abstractions\GameImpact.Abstractions.csproj" />
         <ProjectReference Include="..\GameImpact.Core\GameImpact.Core.csproj" />
     </ItemGroup>
     <ItemGroup>
