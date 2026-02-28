@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-using GameImpact.UI.Models;
+using GameImpact.Abstractions.Windowing;
 
 #endregion
 
