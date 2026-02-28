@@ -5,6 +5,7 @@ using GameImpact.Abstractions.Hotkey;
 using GameImpact.Abstractions.Input;
 using GameImpact.Abstractions.Recognition;
 using GameImpact.Automation;
+using GameImpact.Core.Windowing;
 using GameImpact.Capture;
 using GameImpact.Hotkey;
 using GameImpact.Input;
@@ -26,6 +27,7 @@ namespace GameImpact.Core
             services.AddSingleton<IInputSimulator>(_ => InputFactory.CreateSendInput());
             services.AddSingleton<IHotkeyService, HotkeyService>();
             services.AddSingleton<IRecognitionService, RecognitionService>();
+            services.AddSingleton<IWindowEnumerator, Win32WindowEnumerator>();
             services.AddSingleton<TaskEngine>();
             services.AddSingleton<GameContext>();
             return services;

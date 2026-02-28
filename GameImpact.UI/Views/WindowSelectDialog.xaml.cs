@@ -5,8 +5,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using GameImpact.UI.Models;
-using GameImpact.UI.Services;
+using GameImpact.Core.Windowing;
 
 #endregion
 
@@ -15,12 +14,14 @@ namespace GameImpact.UI.Views
     /// <summary>窗口选择对话框</summary>
     public partial class WindowSelectDialog : Window
     {
+        private readonly IWindowEnumerator m_windowEnumerator;
         private List<WindowInfo> m_allWindows = [];
 
         /// <summary>构造函数</summary>
-        public WindowSelectDialog()
+        public WindowSelectDialog(IWindowEnumerator windowEnumerator)
         {
             InitializeComponent();
+            m_windowEnumerator = windowEnumerator;
             LoadWindows();
         }
 
@@ -39,7 +40,7 @@ namespace GameImpact.UI.Views
         /// <summary>加载所有窗口列表</summary>
         private void LoadWindows()
         {
-            m_allWindows = WindowEnumerator.GetAllWindows()
+            m_allWindows = m_windowEnumerator.GetAllWindows()
                     .OrderBy(w => w.ProcessName)
                     .ThenBy(w => w.Title)
                     .ToList();
