@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Input;
 using GameImpact.UI.Services;
+using GameImpact.UI.Settings;
 using GameImpact.UI.Views;
 
 namespace GameImpact.UI;
@@ -10,6 +11,12 @@ public partial class MainWindow : Window
 {
     private readonly MainModel model;
     private DebugWindow? _debugWindow;
+    private SettingsWindow? m_settingsWindow;
+
+    /// <summary>
+    /// 设置窗口创建工厂，由 GameImpactApp 基类在启动时注入
+    /// </summary>
+    public Func<SettingsWindow>? SettingsWindowFactory { get; set; }
 
     /// <summary>
     /// Shell 窗口标题，由 GameImpactApp 基类设置
@@ -99,13 +106,29 @@ public partial class MainWindow : Window
 
     private void Settings_Click(object sender, RoutedEventArgs e)
     {
-        // TODO: 设置面板
+        // 如果设置窗口已存在且未关闭，则激活它
+        if (m_settingsWindow is { IsLoaded: true })
+        {
+            m_settingsWindow.Activate();
+            return;
+        }
+
+        if (SettingsWindowFactory == null)
+        {
+            return;
+        }
+
+        m_settingsWindow = SettingsWindowFactory();
+        m_settingsWindow.Owner = this;
+        m_settingsWindow.Closed += (_, _) => m_settingsWindow = null;
+        m_settingsWindow.Show();
     }
 
     protected override void OnClosed(EventArgs e)
     {
-        // 关闭主窗口时同时关闭调试窗口
+        // 关闭主窗口时同时关闭子窗口
         _debugWindow?.Close();
+        m_settingsWindow?.Close();
         model.Cleanup();
         ThemeService.Instance.ThemeChanged -= OnThemeChanged;
         base.OnClosed(e);

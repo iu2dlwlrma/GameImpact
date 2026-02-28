@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Windows;
 using GameImpact.Core;
 using GameImpact.UI.Services;
+using GameImpact.UI.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -42,6 +44,12 @@ public abstract class GameImpactApp : Application
     /// 返回 null 则使用 Shell 的默认视图（捕获状态面板）。
     /// </summary>
     protected virtual FrameworkElement? CreateContentView(IServiceProvider services) => null;
+
+    /// <summary>
+    /// 子类覆写以提供项目设置页签列表，会被嵌入到设置窗口的导航栏中。
+    /// 返回空列表则设置窗口中不显示项目设置页签。
+    /// </summary>
+    protected virtual IEnumerable<SettingsPage> CreateProjectSettingsPages(IServiceProvider services) => Array.Empty<SettingsPage>();
 
     /// <summary>
     /// 是否在启动时请求管理员权限
@@ -92,6 +100,9 @@ public abstract class GameImpactApp : Application
                 {
                     // 注册核心服务
                     services.AddGameImpact();
+                    // 注册应用设置服务
+                    services.AddSingleton<ISettingsProvider<AppSettings>>(
+                        new JsonSettingsProvider<AppSettings>("appsettings.json"));
                     // 注册 Shell 窗口和 MainModel
                     services.AddSingleton<MainWindow>();
                     services.AddSingleton<MainModel>();
@@ -104,8 +115,10 @@ public abstract class GameImpactApp : Application
         var loggerFactory = _host.Services.GetRequiredService<ILoggerFactory>();
         AppLog.Initialize(loggerFactory);
 
-        // 初始化主题
-        ThemeService.Instance.SetTheme(AppTheme.Dark);
+        // 从设置中加载主题
+        var appSettingsProvider = _host.Services.GetRequiredService<ISettingsProvider<AppSettings>>();
+        var appSettings = appSettingsProvider.Load();
+        ThemeService.Instance.SetTheme(appSettings.Theme);
 
         AppLog.Info("{AppName} starting...", AppName);
         await _host.StartAsync();
@@ -120,6 +133,34 @@ public abstract class GameImpactApp : Application
         {
             mainWindow.SetContentView(contentView);
         }
+
+        // 注册设置窗口创建工厂
+        mainWindow.SettingsWindowFactory = () =>
+        {
+            var pages = new List<SettingsPage>();
+
+            // 构建应用设置页签（按分组自动拆分子页签）
+            var settingsProvider = _host.Services.GetRequiredService<ISettingsProvider<AppSettings>>();
+            var appPage = SettingsPageBuilder.Build<AppSettings>(
+                settingsProvider,
+                title: "应用设置",
+                icon: "📱",
+                order: 0,
+                settingChangedHandler: (settings, propertyName) =>
+                {
+                    if (propertyName == nameof(AppSettings.Theme))
+                    {
+                        ThemeService.Instance.SetTheme(settings.Theme);
+                    }
+                });
+            pages.Add(appPage);
+
+            // 获取子类提供的项目设置页签
+            var projectPages = CreateProjectSettingsPages(_host.Services);
+            pages.AddRange(projectPages);
+
+            return new SettingsWindow(pages);
+        };
 
         mainWindow.Show();
 
