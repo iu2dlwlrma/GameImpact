@@ -1,6 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    
+
     <!-- 低调奢华风 - 暗色主题 -->
     <Color x:Key="Dark.Background">#0A0A0C</Color>
     <Color x:Key="Dark.Surface">#141418</Color>
@@ -22,7 +22,7 @@
     <Color x:Key="Dark.WarningHover">#E4B85C</Color>
     <Color x:Key="Dark.Error">#C45C5C</Color>
     <Color x:Key="Dark.ErrorHover">#D46C6C</Color>
-    
+
     <!-- 低调奢华风 - 亮色主题 -->
     <Color x:Key="Light.Background">#F8F7F5</Color>
     <Color x:Key="Light.Surface">#FFFFFF</Color>
@@ -44,5 +44,5 @@
     <Color x:Key="Light.WarningHover">#A47820</Color>
     <Color x:Key="Light.Error">#A44040</Color>
     <Color x:Key="Light.ErrorHover">#943030</Color>
-    
+
 </ResourceDictionary>

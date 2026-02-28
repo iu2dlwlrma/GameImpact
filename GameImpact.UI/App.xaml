@@ -4,9 +4,9 @@
     <ResourceDictionary.MergedDictionaries>
         <ui:ThemesDictionary Theme="Dark" />
         <ui:ControlsDictionary />
-        <ResourceDictionary Source="pack://application:,,,/GameImpact.UI;component/Themes/DarkTheme.xaml"/>
+        <ResourceDictionary Source="pack://application:,,,/GameImpact.UI;component/Themes/DarkTheme.xaml" />
     </ResourceDictionary.MergedDictionaries>
-    
+
     <!-- 转换器 -->
-    <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
 </ResourceDictionary>

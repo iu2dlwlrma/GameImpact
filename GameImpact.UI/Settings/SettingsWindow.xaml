@@ -85,7 +85,7 @@
                     </StackPanel>
 
                     <Button Grid.Column="1" Style="{DynamicResource WindowCloseButton}"
-                            Click="Close_Click" ToolTip="关闭" Width="44" Height="44">
+                            Click="Close_Click" ToolTip="关闭">
                         <TextBlock Text="✕" FontSize="11" />
                     </Button>
                 </Grid>

@@ -12,7 +12,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\GameImpact.UI\GameImpact.UI.csproj" />
+        <ProjectReference Include="..\GameImpact.UI\GameImpact.UI.csproj"/>
     </ItemGroup>
 
 </Project>

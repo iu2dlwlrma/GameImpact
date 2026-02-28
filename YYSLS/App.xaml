@@ -1,13 +1,13 @@
 ﻿<gi:GameImpactApp x:Class="YYSLS.App"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:gi="clr-namespace:GameImpact.UI;assembly=GameImpact.UI"
-             ShutdownMode="OnMainWindowClose">
+                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                  xmlns:gi="clr-namespace:GameImpact.UI;assembly=GameImpact.UI"
+                  ShutdownMode="OnMainWindowClose">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <!-- 引用 GameImpact.UI 提供的通用资源（主题、样式、转换器等） -->
-                <ResourceDictionary Source="pack://application:,,,/GameImpact.UI;component/App.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/GameImpact.UI;component/App.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

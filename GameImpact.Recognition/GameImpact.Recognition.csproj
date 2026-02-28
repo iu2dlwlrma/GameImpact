@@ -7,11 +7,11 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="OpenCvSharp4.Extensions" Version="4.11.0.20250507" />
-        <PackageReference Include="OpenCvSharp4.Windows" Version="4.11.0.20250507" />
+        <PackageReference Include="OpenCvSharp4.Extensions" Version="4.11.0.20250507"/>
+        <PackageReference Include="OpenCvSharp4.Windows" Version="4.11.0.20250507"/>
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\GameImpact.Abstractions\GameImpact.Abstractions.csproj" />
-        <ProjectReference Include="..\GameImpact.Utilities\GameImpact.Utilities.csproj" />
+        <ProjectReference Include="..\GameImpact.Abstractions\GameImpact.Abstractions.csproj"/>
+        <ProjectReference Include="..\GameImpact.Utilities\GameImpact.Utilities.csproj"/>
     </ItemGroup>
 </Project>

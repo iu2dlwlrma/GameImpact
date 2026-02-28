@@ -1,66 +1,76 @@
+#region
+
 using System;
 using System.Collections.ObjectModel;
 using System.Windows;
+using Wpf.Ui.Appearance;
 
-namespace GameImpact.UI.Services;
+#endregion
 
-public enum AppTheme { Dark, Light }
-
-/// <summary>
-/// 应用程序主题服务
-/// </summary>
-public class ThemeService
+namespace GameImpact.UI.Services
 {
-    private static ThemeService? s_instance;
-    public static ThemeService Instance => s_instance ??= new ThemeService();
-
-    public AppTheme CurrentTheme { get; private set; } = AppTheme.Dark;
-    public event Action<AppTheme>? ThemeChanged;
-
-    public void SetTheme(AppTheme theme)
+    public enum AppTheme
     {
-        if (CurrentTheme == theme) return;
-        CurrentTheme = theme;
-
-        var app = Application.Current;
-        var resources = app.Resources.MergedDictionaries;
-
-        // 移除旧主题（在顶层和嵌套的 MergedDictionaries 中递归查找）
-        RemoveThemeDictionaries(resources);
-
-        // 添加新主题（使用 pack URI，确保从 GameImpact.UI 程序集加载资源）
-        var themeName = theme == AppTheme.Dark ? "DarkTheme" : "LightTheme";
-        var themeUri = new Uri($"pack://application:,,,/GameImpact.UI;component/Themes/{themeName}.xaml", UriKind.Absolute);
-        resources.Add(new ResourceDictionary { Source = themeUri });
-
-        // 同步 WPF UI 主题
-        var wpfTheme = theme == AppTheme.Dark
-            ? Wpf.Ui.Appearance.ApplicationTheme.Dark
-            : Wpf.Ui.Appearance.ApplicationTheme.Light;
-        Wpf.Ui.Appearance.ApplicationThemeManager.Apply(wpfTheme);
-
-        ThemeChanged?.Invoke(theme);
+        Dark,
+        Light
     }
 
-    /// <summary>
-    /// 递归移除包含 "Theme.xaml" 的资源字典
-    /// </summary>
-    private static void RemoveThemeDictionaries(Collection<ResourceDictionary> dictionaries)
+    /// <summary>应用程序主题服务</summary>
+    public class ThemeService
     {
-        for (int i = dictionaries.Count - 1; i >= 0; i--)
+        private static ThemeService? s_instance;
+        public static ThemeService Instance => s_instance ??= new ThemeService();
+
+        public AppTheme CurrentTheme{ get; private set; } = AppTheme.Dark;
+        public event Action<AppTheme>? ThemeChanged;
+
+        public void SetTheme(AppTheme theme)
         {
-            var dict = dictionaries[i];
-            var source = dict.Source?.ToString() ?? "";
-            if (source.Contains("Theme.xaml") && !source.Contains("ThemesDictionary"))
+            if (CurrentTheme == theme)
             {
-                dictionaries.RemoveAt(i);
+                return;
             }
-            else if (dict.MergedDictionaries.Count > 0)
+            CurrentTheme = theme;
+
+            var app = Application.Current;
+            var resources = app.Resources.MergedDictionaries;
+
+            // 移除旧主题（在顶层和嵌套的 MergedDictionaries 中递归查找）
+            RemoveThemeDictionaries(resources);
+
+            // 添加新主题（使用 pack URI，确保从 GameImpact.UI 程序集加载资源）
+            var themeName = theme == AppTheme.Dark ? "DarkTheme" : "LightTheme";
+            var themeUri = new Uri($"pack://application:,,,/GameImpact.UI;component/Themes/{themeName}.xaml", UriKind.Absolute);
+            resources.Add(new ResourceDictionary { Source = themeUri });
+
+            // 同步 WPF UI 主题
+            var wpfTheme = theme == AppTheme.Dark ? ApplicationTheme.Dark : ApplicationTheme.Light;
+            ApplicationThemeManager.Apply(wpfTheme);
+
+            ThemeChanged?.Invoke(theme);
+        }
+
+        /// <summary>递归移除包含 "Theme.xaml" 的资源字典</summary>
+        private static void RemoveThemeDictionaries(Collection<ResourceDictionary> dictionaries)
+        {
+            for (var i = dictionaries.Count - 1; i >= 0; i--)
             {
-                RemoveThemeDictionaries(dict.MergedDictionaries);
+                var dict = dictionaries[i];
+                var source = dict.Source?.ToString() ?? "";
+                if (source.Contains("Theme.xaml") && !source.Contains("ThemesDictionary"))
+                {
+                    dictionaries.RemoveAt(i);
+                }
+                else if (dict.MergedDictionaries.Count > 0)
+                {
+                    RemoveThemeDictionaries(dict.MergedDictionaries);
+                }
             }
         }
-    }
 
-    public void ToggleTheme() => SetTheme(CurrentTheme == AppTheme.Dark ? AppTheme.Light : AppTheme.Dark);
+        public void ToggleTheme()
+        {
+            SetTheme(CurrentTheme == AppTheme.Dark ? AppTheme.Light : AppTheme.Dark);
+        }
+    }
 }

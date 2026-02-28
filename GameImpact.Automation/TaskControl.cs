@@ -1,52 +1,65 @@
-namespace GameImpact.Automation;
+#region
 
-public static class TaskControl
+using System.Diagnostics;
+
+#endregion
+
+namespace GameImpact.Automation
 {
-    public static void Sleep(int milliseconds, CancellationToken ct = default)
+    public static class TaskControl
     {
-        ct.ThrowIfCancellationRequested();
-        if (milliseconds <= 0) return;
-        Thread.Sleep(milliseconds);
-        ct.ThrowIfCancellationRequested();
-    }
-
-    public static async Task DelayAsync(int milliseconds, CancellationToken ct = default)
-    {
-        ct.ThrowIfCancellationRequested();
-        if (milliseconds <= 0) return;
-        await Task.Delay(milliseconds, ct);
-        ct.ThrowIfCancellationRequested();
-    }
-
-    public static async Task WaitUntilAsync(Func<bool> condition, int checkIntervalMs = 100, int timeoutMs = 10000, CancellationToken ct = default)
-    {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        while (!condition())
+        public static void Sleep(int milliseconds, CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
-            if (sw.ElapsedMilliseconds > timeoutMs)
+            if (milliseconds <= 0)
             {
-                throw new TimeoutException("Wait condition timeout");
+                return;
             }
-            await Task.Delay(checkIntervalMs, ct);
+            Thread.Sleep(milliseconds);
+            ct.ThrowIfCancellationRequested();
         }
-    }
 
-    public static async Task<T> RetryAsync<T>(Func<Task<T>> action, Func<T, bool> successCondition, int maxRetries = 3, int delayMs = 500, CancellationToken ct = default)
-    {
-        for (var i = 0; i < maxRetries; i++)
+        public static async Task DelayAsync(int milliseconds, CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
-            var result = await action();
-            if (successCondition(result))
+            if (milliseconds <= 0)
             {
-                return result;
+                return;
             }
-            if (i < maxRetries - 1)
+            await Task.Delay(milliseconds, ct);
+            ct.ThrowIfCancellationRequested();
+        }
+
+        public static async Task WaitUntilAsync(Func<bool> condition, int checkIntervalMs = 100, int timeoutMs = 10000, CancellationToken ct = default)
+        {
+            var sw = Stopwatch.StartNew();
+            while (!condition())
             {
-                await Task.Delay(delayMs, ct);
+                ct.ThrowIfCancellationRequested();
+                if (sw.ElapsedMilliseconds > timeoutMs)
+                {
+                    throw new TimeoutException("Wait condition timeout");
+                }
+                await Task.Delay(checkIntervalMs, ct);
             }
         }
-        throw new InvalidOperationException($"Retry failed after {maxRetries} attempts");
+
+        public static async Task<T> RetryAsync<T>(Func<Task<T>> action, Func<T, bool> successCondition, int maxRetries = 3, int delayMs = 500, CancellationToken ct = default)
+        {
+            for (var i = 0; i < maxRetries; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                var result = await action();
+                if (successCondition(result))
+                {
+                    return result;
+                }
+                if (i < maxRetries - 1)
+                {
+                    await Task.Delay(delayMs, ct);
+                }
+            }
+            throw new InvalidOperationException($"Retry failed after {maxRetries} attempts");
+        }
     }
 }

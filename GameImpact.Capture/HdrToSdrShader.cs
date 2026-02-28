@@ -1,14 +1,10 @@
-namespace GameImpact.Capture;
-
-/// <summary>
-/// HDR→SDR Compute Shader（Hable/Uncharted2 Tone Mapping + sRGB Gamma）
-/// </summary>
-public static class HdrToSdrShader
+namespace GameImpact.Capture
 {
-    /// <summary>
-    /// HLSL Compute Shader 源码
-    /// </summary>
-    public const string ShaderSource = @"
+    /// <summary>HDR→SDR Compute Shader（Hable/Uncharted2 Tone Mapping + sRGB Gamma）</summary>
+    public static class HdrToSdrShader
+    {
+        /// <summary>HLSL Compute Shader 源码</summary>
+        public const string ShaderSource = @"
 // Hable/Uncharted2 Tone Mapping 参数
 static const float A = 0.15;  // Shoulder Strength
 static const float B = 0.50;  // Linear Strength
@@ -56,4 +52,5 @@ void CSMain(uint3 dtid : SV_DispatchThreadID)
     OutputTexture[dtid.xy] = float4(saturate(sdr), 1.0);
 }
 ";
+    }
 }

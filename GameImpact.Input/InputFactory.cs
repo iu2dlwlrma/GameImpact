@@ -1,8 +1,16 @@
+#region
+
 using GameImpact.Abstractions.Input;
 
-namespace GameImpact.Input;
+#endregion
 
-public static class InputFactory
+namespace GameImpact.Input
 {
-    public static IInputSimulator CreateSendInput() => new SendInputSimulator();
+    public static class InputFactory
+    {
+        public static IInputSimulator CreateSendInput()
+        {
+            return new SendInputSimulator();
+        }
+    }
 }

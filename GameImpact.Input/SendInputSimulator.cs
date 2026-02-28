@@ -1,77 +1,68 @@
+#region
+
 using System.Runtime.InteropServices;
 using GameImpact.Abstractions.Input;
 using GameImpact.Input.Native;
 using GameImpact.Utilities.Logging;
 
-namespace GameImpact.Input;
+#endregion
 
-/// <summary>
-/// 键盘输入的发送方式。
-/// </summary>
-public enum KeyboardInputMode
+namespace GameImpact.Input
 {
-    /// <summary>通过 SendInput API 注入虚拟键码（默认）。</summary>
-    SendInputVk,
-    /// <summary>通过 SendInput API 注入硬件扫描码。</summary>
-    SendInputScanCode,
-    /// <summary>通过 PostMessage 直接向目标窗口投递 WM_KEYDOWN/WM_KEYUP 消息。
-    /// 绕过 Raw Input，适用于 SendInput 被游戏忽略的场景。</summary>
-    PostMessage,
-}
-
-/// <summary>
-/// 基于 Windows SendInput 和 PostMessage API 的输入模拟器实现
-/// </summary>
-public partial class SendInputSimulator : IInputSimulator
-{
-    private nint m_hWnd;
-
-    public IKeyboardInput Keyboard => this;
-    public IMouseInput Mouse => this;
-
-    /// <summary>
-    /// 键盘输入的发送方式，默认 <see cref="KeyboardInputMode.SendInputVk"/>。
-    /// 如果游戏不响应 SendInput，可切换为 <see cref="KeyboardInputMode.PostMessage"/>。
-    /// </summary>
-    public KeyboardInputMode KeyboardMode { get; set; } = KeyboardInputMode.SendInputVk;
-
-    /// <summary>
-    /// 设置后台操作的目标窗口句柄。
-    /// </summary>
-    /// <param name="windowHandle">目标窗口句柄</param>
-    public void SetWindowHandle(nint windowHandle)
+    /// <summary>键盘输入的发送方式。</summary>
+    public enum KeyboardInputMode
     {
-        m_hWnd = windowHandle;
+        /// <summary>通过 SendInput API 注入虚拟键码（默认）。</summary>
+        SendInputVk,
+        /// <summary>通过 SendInput API 注入硬件扫描码。</summary>
+        SendInputScanCode,
+        /// <summary>通过 PostMessage 直接向目标窗口投递 WM_KEYDOWN/WM_KEYUP 消息。 绕过 Raw Input，适用于 SendInput 被游戏忽略的场景。</summary>
+        PostMessage
     }
 
-    /// <summary>
-    /// 发送输入事件
-    /// </summary>
-    /// <param name="input">输入事件结构</param>
-    /// <returns>成功发送的事件数量</returns>
-    private static uint SendInputEvent(NativeMethods.Input input)
+    /// <summary>基于 Windows SendInput 和 PostMessage API 的输入模拟器实现</summary>
+    public partial class SendInputSimulator : IInputSimulator
     {
-        var result = NativeMethods.SendInput(1, [input], NativeMethods.Input.Size);
-        if (result == 0)
+        private nint m_hWnd;
+
+        /// <summary>键盘输入的发送方式，默认 <see cref="KeyboardInputMode.SendInputVk"/>。 如果游戏不响应 SendInput，可切换为 <see cref="KeyboardInputMode.PostMessage"/>。</summary>
+        public KeyboardInputMode KeyboardMode{ get; set; } = KeyboardInputMode.SendInputVk;
+
+        public IKeyboardInput Keyboard => this;
+        public IMouseInput Mouse => this;
+
+        /// <summary>设置后台操作的目标窗口句柄。</summary>
+        /// <param name="windowHandle">目标窗口句柄</param>
+        public void SetWindowHandle(nint windowHandle)
         {
-            LogWin32Error("[SendInput] Failed");
+            m_hWnd = windowHandle;
         }
-        return result;
-    }
 
-    /// <summary>
-    /// 记录 Win32 错误日志
-    /// </summary>
-    /// <param name="message">错误消息模板</param>
-    /// <param name="args">消息参数</param>
-    private static void LogWin32Error(string message, params object[] args)
-    {
-        var error = Marshal.GetLastWin32Error();
-        var fullArgs = new object[args.Length + 2];
-        args.CopyTo(fullArgs, 0);
-        fullArgs[^2] = error;
-        fullArgs[^1] = error;
-        Log.Warn(message + ", Win32 error: {ErrorCode} (0x{ErrorHex:X8})", fullArgs);
-        InputDiagnostics.LogLoadedModules();
+        /// <summary>发送输入事件</summary>
+        /// <param name="input">输入事件结构</param>
+        /// <returns>成功发送的事件数量</returns>
+        private static uint SendInputEvent(NativeMethods.Input input)
+        {
+            var result = NativeMethods.SendInput(1, [input], NativeMethods.Input.Size);
+            if (result == 0)
+            {
+                LogWin32Error("[SendInput] Failed");
+            }
+            return result;
+        }
+
+        /// <summary>记录 Win32 错误日志</summary>
+        /// <param name="message">错误消息模板</param>
+        /// <param name="args">消息参数</param>
+        private static void LogWin32Error(string message, params object[] args)
+        {
+            var error = Marshal.GetLastWin32Error();
+            var fullArgs = new object[args.Length + 2];
+            args.CopyTo(fullArgs, 0);
+            fullArgs[^2] = error;
+            fullArgs[^1] = error;
+            Log.Warn(message + ", Win32 error: {ErrorCode} (0x{ErrorHex:X8})", fullArgs);
+            InputDiagnostics.LogLoadedModules();
+        }
     }
 }
