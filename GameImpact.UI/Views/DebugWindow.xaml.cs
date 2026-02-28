@@ -9,7 +9,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
-using GameImpact.UI.Models;
+using GameImpact.UI.Services;
 using OpenCvSharp;
 using Rect = OpenCvSharp.Rect;
 
@@ -21,6 +21,7 @@ namespace GameImpact.UI.Views
     public partial class DebugWindow
     {
         private readonly MainModel m_model;
+        private readonly TemplateService m_templates = new();
         private readonly List<string> m_templateFiles = new();
         private Key m_capturedKey = Key.None;
         private ModifierKeys m_capturedModifiers = ModifierKeys.None;
@@ -102,7 +103,7 @@ namespace GameImpact.UI.Views
         {
             try
             {
-                var folderPath = MainModel.TemplatesFolderPath;
+                var folderPath = m_templates.TemplatesFolderPath;
                 
                 // 如果文件夹不存在，先创建
                 if (!Directory.Exists(folderPath))
@@ -138,7 +139,7 @@ namespace GameImpact.UI.Views
 
             try
             {
-                var templatePath = Path.Combine(MainModel.TemplatesFolderPath, selected);
+                var templatePath = m_templates.GetTemplatePath(selected);
                 if (!File.Exists(templatePath))
                 {
                     AppendInputLog($"错误: 模板文件不存在: {selected}");
@@ -182,27 +183,7 @@ namespace GameImpact.UI.Views
         {
             try
             {
-                var roiFilePath = GetRoiFilePath(templateFileName);
-                var roiData = new
-                {
-                    MatchRoi = matchRoi.HasValue ? new
-                    {
-                        X = (int)matchRoi.Value.X,
-                        Y = (int)matchRoi.Value.Y,
-                        Width = (int)matchRoi.Value.Width,
-                        Height = (int)matchRoi.Value.Height
-                    } : null,
-                    TextRoi = textRoi.HasValue ? new
-                    {
-                        X = (int)textRoi.Value.X,
-                        Y = (int)textRoi.Value.Y,
-                        Width = (int)textRoi.Value.Width,
-                        Height = (int)textRoi.Value.Height
-                    } : null
-                };
-
-                var json = JsonSerializer.Serialize(roiData, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(roiFilePath, json);
+                m_templates.SaveTemplateRoi(templateFileName, matchRoi, textRoi);
             }
             catch (Exception ex)
             {
@@ -215,39 +196,7 @@ namespace GameImpact.UI.Views
         {
             try
             {
-                var roiFilePath = GetRoiFilePath(templateFileName);
-                if (!File.Exists(roiFilePath))
-                {
-                    return (null, null);
-                }
-
-                var json = File.ReadAllText(roiFilePath);
-                var roiData = JsonSerializer.Deserialize<JsonElement>(json);
-
-                Rect? matchRoi = null;
-                Rect? textRoi = null;
-
-                if (roiData.TryGetProperty("MatchRoi", out var matchRoiElement) && matchRoiElement.ValueKind != JsonValueKind.Null)
-                {
-                    matchRoi = new OpenCvSharp.Rect(
-                        matchRoiElement.GetProperty("X").GetInt32(),
-                        matchRoiElement.GetProperty("Y").GetInt32(),
-                        matchRoiElement.GetProperty("Width").GetInt32(),
-                        matchRoiElement.GetProperty("Height").GetInt32()
-                    );
-                }
-
-                if (roiData.TryGetProperty("TextRoi", out var textRoiElement) && textRoiElement.ValueKind != JsonValueKind.Null)
-                {
-                    textRoi = new OpenCvSharp.Rect(
-                        textRoiElement.GetProperty("X").GetInt32(),
-                        textRoiElement.GetProperty("Y").GetInt32(),
-                        textRoiElement.GetProperty("Width").GetInt32(),
-                        textRoiElement.GetProperty("Height").GetInt32()
-                    );
-                }
-
-                return (matchRoi, textRoi);
+                return m_templates.LoadTemplateRoi(templateFileName);
             }
             catch (Exception ex)
             {
@@ -260,7 +209,7 @@ namespace GameImpact.UI.Views
         private string GetRoiFilePath(string templateFileName)
         {
             var baseName = Path.GetFileNameWithoutExtension(templateFileName);
-            return Path.Combine(MainModel.TemplatesFolderPath, $"{baseName}.roi.json");
+            return Path.Combine(m_templates.TemplatesFolderPath, $"{baseName}.roi.json");
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

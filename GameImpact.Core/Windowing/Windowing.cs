@@ -1,17 +1,29 @@
-#region
-
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-using GameImpact.Abstractions.Windowing;
 
-#endregion
-
-namespace GameImpact.UI.Services
+namespace GameImpact.Core.Windowing
 {
-    /// <summary>窗口枚举器，用于获取系统中所有可见窗口的信息</summary>
-    public static class WindowEnumerator
+    /// <summary>窗口信息模型（供 Core 和 UI 等模块共享）。</summary>
+    public class WindowInfo
+    {
+        public nint Handle { get; init; }
+        public string Title { get; init; } = string.Empty;
+        public string ProcessName { get; init; } = string.Empty;
+        public int ProcessId { get; init; }
+        public string DisplayText => $"{ProcessName} - {Title}";
+        public string HandleText => $"0x{Handle:X}";
+    }
+
+    /// <summary>窗口枚举抽象。</summary>
+    public interface IWindowEnumerator
+    {
+        List<WindowInfo> GetAllWindows();
+    }
+
+    /// <summary>基于 Win32 API 的窗口枚举实现。</summary>
+    public sealed class Win32WindowEnumerator : IWindowEnumerator
     {
         [DllImport("user32.dll")]
         private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, nint lParam);
@@ -29,14 +41,9 @@ namespace GameImpact.UI.Services
         private static extern uint GetWindowThreadProcessId(nint hWnd, out uint lpdwProcessId);
 
         [DllImport("user32.dll")]
-        private static extern nint GetWindow(nint hWnd, uint uCmd);
-
-        [DllImport("user32.dll")]
         private static extern bool GetWindowRect(nint hWnd, out RECT lpRect);
 
-        /// <summary>获取所有可见窗口的信息列表</summary>
-        /// <returns>窗口信息列表</returns>
-        public static List<WindowInfo> GetAllWindows()
+        public List<WindowInfo> GetAllWindows()
         {
             var windows = new List<WindowInfo>();
 
@@ -53,7 +60,6 @@ namespace GameImpact.UI.Services
                     return true;
                 }
 
-                // 检查窗口大小，过滤掉太小的窗口
                 if (!GetWindowRect(hWnd, out var rect))
                 {
                     return true;
@@ -66,7 +72,7 @@ namespace GameImpact.UI.Services
                 }
 
                 var sb = new StringBuilder(length + 1);
-                GetWindowText(hWnd, sb, sb.Capacity);
+                _ = GetWindowText(hWnd, sb, sb.Capacity);
                 var title = sb.ToString();
 
                 GetWindowThreadProcessId(hWnd, out var processId);
@@ -76,10 +82,10 @@ namespace GameImpact.UI.Services
                     var process = Process.GetProcessById((int)processId);
                     windows.Add(new WindowInfo
                     {
-                            Handle = hWnd,
-                            Title = title,
-                            ProcessName = process.ProcessName,
-                            ProcessId = (int)processId
+                        Handle = hWnd,
+                        Title = title,
+                        ProcessName = process.ProcessName,
+                        ProcessId = (int)processId
                     });
                 }
                 catch
@@ -102,3 +108,4 @@ namespace GameImpact.UI.Services
         private delegate bool EnumWindowsProc(nint hWnd, nint lParam);
     }
 }
+
