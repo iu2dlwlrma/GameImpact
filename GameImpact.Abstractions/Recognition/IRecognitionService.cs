@@ -16,8 +16,12 @@ namespace GameImpact.Abstractions.Recognition
     public record MatchOptions(
             double Threshold = 0.8,
             Rect? RegionOfInterest = null,
+            Rect? TemplateRegionOfInterest = null,
             bool UseBinaryMatch = false,
             int BinaryThreshold = 128,
+            bool UseEdgeMatch = false,
+            int CannyThreshold1 = 50,
+            int CannyThreshold2 = 150,
             TemplateMatchModes MatchMode = TemplateMatchModes.CCoeffNormed);
 
     public record TemplateMatchResult(

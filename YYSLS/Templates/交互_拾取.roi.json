@@ -1,0 +1,14 @@
+{
+  "MatchRoi": {
+    "X": 0,
+    "Y": 1,
+    "Width": 66,
+    "Height": 67
+  },
+  "TextRoi": {
+    "X": 82,
+    "Y": 0,
+    "Width": 331,
+    "Height": 68
+  }
+}

@@ -2,10 +2,16 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using GameImpact.UI.Models;
+using OpenCvSharp;
+using Rect = OpenCvSharp.Rect;
 
 #endregion
 
@@ -33,14 +39,32 @@ namespace GameImpact.UI.Views
         /// <summary>刷新模板列表</summary>
         private void RefreshTemplateList()
         {
+            var previousSelected = TemplateListCombo.SelectedItem as string;
             m_templateFiles.Clear();
             m_templateFiles.AddRange(m_model.GetTemplateFileNames());
             TemplateListCombo.ItemsSource = null;
             TemplateListCombo.ItemsSource = m_templateFiles;
-            if (m_templateFiles.Count > 0 && TemplateListCombo.SelectedIndex < 0)
+
+            if (!string.IsNullOrEmpty(previousSelected) && m_templateFiles.Contains(previousSelected))
+            {
+                TemplateListCombo.SelectedItem = previousSelected;
+                return;
+            }
+
+            if (m_templateFiles.Count > 0)
             {
                 TemplateListCombo.SelectedIndex = 0;
             }
+            else
+            {
+                TemplateListCombo.SelectedIndex = -1;
+            }
+        }
+
+        /// <summary>模板下拉框展开时刷新列表（支持外部删除/新增文件后立即同步）</summary>
+        private void TemplateListCombo_DropDownOpened(object sender, EventArgs e)
+        {
+            RefreshTemplateList();
         }
 
         /// <summary>截图工具按钮点击事件处理</summary>
@@ -71,6 +95,172 @@ namespace GameImpact.UI.Views
             {
                 AppendInputLog($"未匹配到模板: '{selected}'");
             }
+        }
+
+        /// <summary>打开模板文件夹按钮点击事件处理</summary>
+        private void OpenTemplatesFolder_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var folderPath = MainModel.TemplatesFolderPath;
+                
+                // 如果文件夹不存在，先创建
+                if (!Directory.Exists(folderPath))
+                {
+                    Directory.CreateDirectory(folderPath);
+                }
+
+                // 打开文件夹
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = folderPath,
+                    UseShellExecute = true,
+                    Verb = "open"
+                });
+
+                AppendInputLog($"已打开模板文件夹: {folderPath}");
+            }
+            catch (Exception ex)
+            {
+                AppendInputLog($"打开文件夹失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>设置模板ROI按钮点击事件处理</summary>
+        private void SetTemplateRoi_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = TemplateListCombo.SelectedItem as string;
+            if (string.IsNullOrEmpty(selected))
+            {
+                AppendInputLog("错误: 请先选择模板");
+                return;
+            }
+
+            try
+            {
+                var templatePath = Path.Combine(MainModel.TemplatesFolderPath, selected);
+                if (!File.Exists(templatePath))
+                {
+                    AppendInputLog($"错误: 模板文件不存在: {selected}");
+                    return;
+                }
+
+                // 加载已保存的ROI设置
+                var (matchRoi, textRoi) = LoadTemplateRoi(selected);
+
+                // 显示ROI设置对话框
+                var dialog = new TemplateRoiDialog(templatePath, matchRoi, textRoi)
+                {
+                    Owner = this
+                };
+
+                if (dialog.ShowDialog() == true)
+                {
+                    // 保存ROI设置
+                    SaveTemplateRoi(selected, dialog.MatchRoi, dialog.TextRoi);
+                    AppendInputLog($"已保存模板ROI设置: {selected}");
+                    if (dialog.MatchRoi.HasValue)
+                    {
+                        var m = dialog.MatchRoi.Value;
+                        AppendInputLog($"  匹配区域: ({m.X:F0}, {m.Y:F0}, {m.Width:F0}, {m.Height:F0})");
+                    }
+                    if (dialog.TextRoi.HasValue)
+                    {
+                        var t = dialog.TextRoi.Value;
+                        AppendInputLog($"  文字区域: ({t.X:F0}, {t.Y:F0}, {t.Width:F0}, {t.Height:F0})");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendInputLog($"设置ROI失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>保存模板ROI设置到JSON文件</summary>
+        private void SaveTemplateRoi(string templateFileName, OpenCvSharp.Rect? matchRoi, OpenCvSharp.Rect? textRoi)
+        {
+            try
+            {
+                var roiFilePath = GetRoiFilePath(templateFileName);
+                var roiData = new
+                {
+                    MatchRoi = matchRoi.HasValue ? new
+                    {
+                        X = (int)matchRoi.Value.X,
+                        Y = (int)matchRoi.Value.Y,
+                        Width = (int)matchRoi.Value.Width,
+                        Height = (int)matchRoi.Value.Height
+                    } : null,
+                    TextRoi = textRoi.HasValue ? new
+                    {
+                        X = (int)textRoi.Value.X,
+                        Y = (int)textRoi.Value.Y,
+                        Width = (int)textRoi.Value.Width,
+                        Height = (int)textRoi.Value.Height
+                    } : null
+                };
+
+                var json = JsonSerializer.Serialize(roiData, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(roiFilePath, json);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DebugWindow] 保存ROI失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>从JSON文件加载模板ROI设置</summary>
+        private (OpenCvSharp.Rect? matchRoi, OpenCvSharp.Rect? textRoi) LoadTemplateRoi(string templateFileName)
+        {
+            try
+            {
+                var roiFilePath = GetRoiFilePath(templateFileName);
+                if (!File.Exists(roiFilePath))
+                {
+                    return (null, null);
+                }
+
+                var json = File.ReadAllText(roiFilePath);
+                var roiData = JsonSerializer.Deserialize<JsonElement>(json);
+
+                Rect? matchRoi = null;
+                Rect? textRoi = null;
+
+                if (roiData.TryGetProperty("MatchRoi", out var matchRoiElement) && matchRoiElement.ValueKind != JsonValueKind.Null)
+                {
+                    matchRoi = new OpenCvSharp.Rect(
+                        matchRoiElement.GetProperty("X").GetInt32(),
+                        matchRoiElement.GetProperty("Y").GetInt32(),
+                        matchRoiElement.GetProperty("Width").GetInt32(),
+                        matchRoiElement.GetProperty("Height").GetInt32()
+                    );
+                }
+
+                if (roiData.TryGetProperty("TextRoi", out var textRoiElement) && textRoiElement.ValueKind != JsonValueKind.Null)
+                {
+                    textRoi = new OpenCvSharp.Rect(
+                        textRoiElement.GetProperty("X").GetInt32(),
+                        textRoiElement.GetProperty("Y").GetInt32(),
+                        textRoiElement.GetProperty("Width").GetInt32(),
+                        textRoiElement.GetProperty("Height").GetInt32()
+                    );
+                }
+
+                return (matchRoi, textRoi);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DebugWindow] 加载ROI失败: {ex.Message}");
+                return (null, null);
+            }
+        }
+
+        /// <summary>获取ROI设置文件路径</summary>
+        private string GetRoiFilePath(string templateFileName)
+        {
+            var baseName = Path.GetFileNameWithoutExtension(templateFileName);
+            return Path.Combine(MainModel.TemplatesFolderPath, $"{baseName}.roi.json");
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

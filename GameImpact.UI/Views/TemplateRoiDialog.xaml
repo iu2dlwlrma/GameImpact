@@ -1,0 +1,121 @@
+<Window x:Class="GameImpact.UI.Views.TemplateRoiDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="设置模板ROI" Height="600" Width="700"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="CanResizeWithGrip">
+
+    <Border Background="{DynamicResource AppBackground}" CornerRadius="8"
+            BorderBrush="{DynamicResource AppBorder}" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="40" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- 标题栏 -->
+            <Border Grid.Row="0" Background="{DynamicResource AppSurface}" CornerRadius="8,8,0,0"
+                    MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <Grid>
+                    <TextBlock Text="设置模板ROI" FontSize="12" FontWeight="SemiBold"
+                               Foreground="{DynamicResource AppText}"
+                               VerticalAlignment="Center" Margin="14,0,0,0" />
+                    <Button Style="{DynamicResource WindowCloseButton}"
+                            HorizontalAlignment="Right" Width="40" Height="40"
+                            Click="CancelButton_Click">
+                        <TextBlock Text="✕" FontSize="10" />
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- 图片预览和ROI选择区域 -->
+            <Border Grid.Row="1" Margin="14,10,14,10"
+                    Background="{DynamicResource AppSurfaceVariant}"
+                    BorderBrush="{DynamicResource AppBorder}" BorderThickness="1"
+                    CornerRadius="4">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                              Name="ImageScrollViewer">
+                    <Canvas x:Name="ImageCanvas" Background="Transparent"
+                            MouseLeftButtonDown="Canvas_MouseLeftButtonDown"
+                            MouseMove="Canvas_MouseMove"
+                            MouseLeftButtonUp="Canvas_MouseLeftButtonUp">
+                        <Image x:Name="TemplateImage" Stretch="None" />
+                        
+                        <!-- 匹配区域ROI（红色边框） -->
+                        <Rectangle x:Name="MatchRoiRect" 
+                                   Stroke="Red" 
+                                   StrokeThickness="2"
+                                   StrokeDashArray="5,5"
+                                   Fill="#40FF0000"
+                                   Visibility="Collapsed" />
+                        
+                        <!-- 文字区域ROI（蓝色边框） -->
+                        <Rectangle x:Name="TextRoiRect" 
+                                   Stroke="Blue" 
+                                   StrokeThickness="2"
+                                   StrokeDashArray="5,5"
+                                   Fill="#400000FF"
+                                   Visibility="Collapsed" />
+                    </Canvas>
+                </ScrollViewer>
+            </Border>
+
+            <!-- ROI信息显示 -->
+            <Grid Grid.Row="2" Margin="14,0,14,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                
+                <!-- 匹配区域信息 -->
+                <Border Grid.Column="0" Background="{DynamicResource AppSurfaceVariant}"
+                        CornerRadius="4" Padding="10" Margin="0,0,6,0">
+                    <StackPanel>
+                        <TextBlock Text="匹配区域（红色）" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AppText}" Margin="0,0,0,6" />
+                        <TextBlock x:Name="MatchRoiInfo" Text="未设置" FontSize="10"
+                                   Foreground="{DynamicResource AppTextSecondary}" />
+                        <Button Content="清除" Style="{DynamicResource SubtleButton}"
+                                Padding="8,4" FontSize="10" Margin="0,6,0,0"
+                                Click="ClearMatchRoi_Click" />
+                    </StackPanel>
+                </Border>
+                
+                <!-- 文字区域信息 -->
+                <Border Grid.Column="1" Background="{DynamicResource AppSurfaceVariant}"
+                        CornerRadius="4" Padding="10" Margin="6,0,0,0">
+                    <StackPanel>
+                        <TextBlock Text="文字区域（蓝色）" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AppText}" Margin="0,0,0,6" />
+                        <TextBlock x:Name="TextRoiInfo" Text="未设置" FontSize="10"
+                                   Foreground="{DynamicResource AppTextSecondary}" />
+                        <Button Content="清除" Style="{DynamicResource SubtleButton}"
+                                Padding="8,4" FontSize="10" Margin="0,6,0,0"
+                                Click="ClearTextRoi_Click" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 操作提示 -->
+            <TextBlock Grid.Row="3" Text="提示：在图片上拖拽框选区域。红色=匹配区域，蓝色=文字区域。"
+                       FontSize="10" Foreground="{DynamicResource AppTextMuted}"
+                       Margin="14,0,14,10" TextWrapping="Wrap" />
+
+            <!-- 底部按钮 -->
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right"
+                        Margin="14,0,14,14">
+                <Button Content="取消" Style="{DynamicResource SubtleButton}"
+                        Width="70" Padding="0,6" FontSize="11" Click="CancelButton_Click" />
+                <Button Content="确定" Style="{DynamicResource AccentButton}"
+                        Width="70" Padding="0,6" FontSize="11" Margin="8,0,0,0" 
+                        Click="OkButton_Click" x:Name="OkButton" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
