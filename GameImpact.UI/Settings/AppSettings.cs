@@ -1,5 +1,6 @@
 #region
 
+using GameImpact.Abstractions.Recognition;
 using GameImpact.UI.Services;
 
 #endregion
@@ -39,9 +40,19 @@ namespace GameImpact.UI.Settings
         public int CaptureFrameRateLimit{ get; set; } = 0;
 
         /// <summary>识别置信度阈值（0.0 - 1.0）</summary>
-        [SettingsGroup("识别", Order = 1)]
+        [SettingsGroup("图像处理", Order = 1)]
         [SettingsItem("识别置信度阈值", Description = "范围 0.0 - 1.0，值越高匹配越严格", Min = 0.0, Max = 1.0)]
         public double RecognitionConfidenceThreshold{ get; set; } = 0.7;
+
+        /// <summary>模板匹配算法组合</summary>
+        [SettingsGroup("图像处理", Order = 1)]
+        [SettingsItem("匹配算法", Description = "选择用于模板匹配的算法，可多选", Options = "标准相关性匹配:NCC|边缘特征匹配:Edge|特征点匹配:FeaturePoints|感知哈希验证:PHash|带掩模匹配:Masked")]
+        public MatchAlgorithm MatchAlgorithms{ get; set; } = MatchAlgorithm.NCC;
+
+        /// <summary>混合匹配的综合方式</summary>
+        [SettingsGroup("图像处理", Order = 1)]
+        [SettingsItem("混合匹配方式", Description = "当使用多个算法时，如何综合结果", Options = "平均值:Average|最大值:Max|最小值:Min|加权平均:WeightedAverage")]
+        public MatchCombineMode MatchCombineMode{ get; set; } = MatchCombineMode.Average;
 
         /// <summary>是否启用 Overlay 窗口</summary>
         [SettingsGroup("叠加层", Order = 2)]

@@ -4,10 +4,12 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using GameImpact.Core;
+using GameImpact.Core.Services;
 using GameImpact.Core.Windowing;
 using GameImpact.UI.Models;
 using GameImpact.UI.Services;
@@ -81,8 +83,8 @@ namespace GameImpact.UI
             Log.Logger = new LoggerConfiguration()
                     .MinimumLevel.Debug()
                     .Enrich.FromLogContext()
-                    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
-                    .WriteTo.Debug(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
+                    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
+                    .WriteTo.Debug(outputTemplate: "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
                     .WriteTo.File("logs/app-.log",
                             rollingInterval: RollingInterval.Day,
                             encoding: Encoding.UTF8,
@@ -95,14 +97,28 @@ namespace GameImpact.UI
                     .UseSerilog()
                     .ConfigureServices((_, services) =>
                     {
+                        // 先注册应用设置服务（需要在 AddGameImpact 之前）
+                        services.AddSingleton<ISettingsProvider<AppSettings>>(
+                                new JsonSettingsProvider<AppSettings>("appsettings.json"));
+                        // 注册匹配设置适配器
+                        services.AddSingleton<IMatchSettings, MatchSettingsAdapter>();
+
                         // 注册核心服务
                         services.AddGameImpact();
+
+                        // 重新注册 TemplateMatchService 以注入 IMatchSettings
+                        services.Remove(services.FirstOrDefault(s => s.ServiceType == typeof(ITemplateMatchService)));
+                        services.AddSingleton<ITemplateMatchService>(sp =>
+                        {
+                            var context = sp.GetRequiredService<GameContext>();
+                            var templates = sp.GetRequiredService<ITemplateService>();
+                            var matchSettings = sp.GetService<IMatchSettings>();
+                            return new TemplateMatchService(context, templates, matchSettings);
+                        });
+
                         // UI 层：Overlay 与右下角 Tips 由 UI 提供
                         services.AddSingleton<IOverlayUiService>(_ => OverlayUiService.Instance);
                         services.AddSingleton<IStatusTipsService, StatusTipsService>();
-                        // 注册应用设置服务
-                        services.AddSingleton<ISettingsProvider<AppSettings>>(
-                                new JsonSettingsProvider<AppSettings>("appsettings.json"));
                         // 注册 Shell 窗口和 MainModel
                         services.AddSingleton<MainWindow>();
                         services.AddSingleton<MainModel>();

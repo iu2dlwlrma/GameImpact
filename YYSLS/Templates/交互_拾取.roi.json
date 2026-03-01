@@ -1,14 +1,14 @@
 {
   "MatchRoi": {
     "X": 0,
-    "Y": 1,
-    "Width": 66,
-    "Height": 67
+    "Y": 0,
+    "Width": 69,
+    "Height": 70
   },
   "TextRoi": {
-    "X": 82,
-    "Y": 0,
-    "Width": 331,
-    "Height": 68
+    "X": 79,
+    "Y": 4,
+    "Width": 341,
+    "Height": 62
   }
 }

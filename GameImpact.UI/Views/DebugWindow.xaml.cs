@@ -24,6 +24,10 @@ namespace GameImpact.UI.Views
         private TabDragHelper? m_tabDragHelper;
         private BitmapSource? m_lastMatchImage;
         private BitmapSource? m_lastCaptureImage;
+        private Window? m_matchImagePreviewWindow;
+        private Window? m_captureImagePreviewWindow;
+        private ImagePreview? m_matchImagePreviewControl;
+        private ImagePreview? m_captureImagePreviewControl;
 
 #endregion
 
@@ -127,6 +131,12 @@ namespace GameImpact.UI.Views
         {
             m_lastMatchImage = bitmapSource;
             System.Diagnostics.Debug.WriteLine($"[DebugWindow] SetMatchImage: {(bitmapSource != null ? "已设置" : "为空")}");
+
+            // 如果预览窗口已打开，自动刷新预览图像
+            if (bitmapSource != null && m_matchImagePreviewControl != null)
+            {
+                m_matchImagePreviewControl.SetImage(bitmapSource);
+            }
         }
 
         /// <summary>设置捕获图像（供CoordinateTab调用）</summary>
@@ -134,6 +144,12 @@ namespace GameImpact.UI.Views
         {
             m_lastCaptureImage = bitmapSource;
             System.Diagnostics.Debug.WriteLine($"[DebugWindow] SetCaptureImage: {(bitmapSource != null ? "已设置" : "为空")}");
+
+            // 如果预览窗口已打开，自动刷新预览图像
+            if (bitmapSource != null && m_captureImagePreviewControl != null)
+            {
+                m_captureImagePreviewControl.SetImage(bitmapSource);
+            }
         }
 
         /// <summary>在独立窗口中打开匹配图 / 捕获图预览</summary>
@@ -143,7 +159,7 @@ namespace GameImpact.UI.Views
 
             if (m_lastMatchImage == null && m_lastCaptureImage == null)
             {
-                System.Windows.MessageBox.Show("没有图像可显示，请先执行模板匹配", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("没有图像可显示，请先执行模板匹配", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -155,30 +171,62 @@ namespace GameImpact.UI.Views
             var gap = 20.0; // 两个窗口之间的间距
 
             // 计算两个窗口的总宽度
-            var totalWidth = (m_lastMatchImage != null ? windowWidth : 0) + 
-                           (m_lastCaptureImage != null ? windowWidth : 0) + 
-                           (m_lastMatchImage != null && m_lastCaptureImage != null ? gap : 0);
+            var totalWidth = (m_lastMatchImage != null ? windowWidth : 0) +
+                    (m_lastCaptureImage != null ? windowWidth : 0) +
+                    (m_lastMatchImage != null && m_lastCaptureImage != null ? gap : 0);
 
             // 计算起始X位置（使两个窗口在屏幕中心并排）
             var startX = (screenWidth - totalWidth) / 2;
             var centerY = (screenHeight - windowHeight) / 2;
 
-            // 创建匹配图预览窗口（左侧）
+            // 更新或创建匹配图预览窗口（左侧）
             if (m_lastMatchImage != null)
             {
-                CreateImagePreviewWindow("匹配图预览", m_lastMatchImage, startX, centerY);
+                if (m_matchImagePreviewWindow != null && m_matchImagePreviewControl != null)
+                {
+                    // 窗口已打开，更新图像
+                    m_matchImagePreviewControl.SetImage(m_lastMatchImage);
+                    // 如果窗口被最小化，恢复显示
+                    if (m_matchImagePreviewWindow.WindowState == WindowState.Minimized)
+                    {
+                        m_matchImagePreviewWindow.WindowState = WindowState.Normal;
+                    }
+                    // 激活窗口
+                    m_matchImagePreviewWindow.Activate();
+                }
+                else
+                {
+                    // 窗口未打开，创建新窗口
+                    CreateImagePreviewWindow("匹配图预览", m_lastMatchImage, startX, centerY, ref m_matchImagePreviewWindow, ref m_matchImagePreviewControl);
+                }
                 startX += windowWidth + gap; // 更新下一个窗口的X位置
             }
 
-            // 创建捕获图预览窗口（右侧）
+            // 更新或创建捕获图预览窗口（右侧）
             if (m_lastCaptureImage != null)
             {
-                CreateImagePreviewWindow("捕获图预览", m_lastCaptureImage, startX, centerY);
+                if (m_captureImagePreviewWindow != null && m_captureImagePreviewControl != null)
+                {
+                    // 窗口已打开，更新图像
+                    m_captureImagePreviewControl.SetImage(m_lastCaptureImage);
+                    // 如果窗口被最小化，恢复显示
+                    if (m_captureImagePreviewWindow.WindowState == WindowState.Minimized)
+                    {
+                        m_captureImagePreviewWindow.WindowState = WindowState.Normal;
+                    }
+                    // 激活窗口
+                    m_captureImagePreviewWindow.Activate();
+                }
+                else
+                {
+                    // 窗口未打开，创建新窗口
+                    CreateImagePreviewWindow("捕获图预览", m_lastCaptureImage, startX, centerY, ref m_captureImagePreviewWindow, ref m_captureImagePreviewControl);
+                }
             }
         }
 
         /// <summary>创建一个简单的图像预览窗口（不会参与 Tab 拖拽/吸附）</summary>
-        private void CreateImagePreviewWindow(string title, BitmapSource source, double left, double top)
+        private void CreateImagePreviewWindow(string title, BitmapSource source, double left, double top, ref Window? windowRef, ref ImagePreview? previewControlRef)
         {
             var window = new Window
             {
@@ -274,6 +322,9 @@ namespace GameImpact.UI.Views
             var imagePreview = new ImagePreview();
             imagePreview.SetImage(source);
 
+            // 保存控件引用以便后续更新
+            previewControlRef = imagePreview;
+
             var contentBorder = new Border
             {
                     Background = (Brush)FindResource("AppBackground"),
@@ -296,6 +347,25 @@ namespace GameImpact.UI.Views
 
             border.Child = grid;
             window.Content = border;
+
+            // 保存窗口引用
+            windowRef = window;
+
+            // 窗口关闭时清除引用
+            window.Closed += (s, e) =>
+            {
+                // 通过字段直接清除引用，而不是通过 ref 参数
+                if (title == "匹配图预览")
+                {
+                    m_matchImagePreviewWindow = null;
+                    m_matchImagePreviewControl = null;
+                }
+                else if (title == "捕获图预览")
+                {
+                    m_captureImagePreviewWindow = null;
+                    m_captureImagePreviewControl = null;
+                }
+            };
 
             window.Show();
         }

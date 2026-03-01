@@ -138,45 +138,66 @@ namespace GameImpact.UI.Settings
             double bottomMargin = isLast ? 4 : 12;
             grid.Margin = new Thickness(0, topMargin, 0, bottomMargin);
 
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var controlType = ResolveControlType(meta);
+            var isCheckBoxGroup = controlType == SettingsControlType.CheckBoxGroup;
 
-            // 左侧：标题 + 描述
-            var textPanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-
-            var titleBlock = new TextBlock
+            if (isCheckBoxGroup)
             {
-                    Text = meta.Item.DisplayName,
-                    FontSize = 13
-            };
-            titleBlock.SetResourceReference(TextBlock.ForegroundProperty, "AppText");
-            textPanel.Children.Add(titleBlock);
+                // 复选框组：全宽布局，控件内部包含标题
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            if (!string.IsNullOrEmpty(meta.Item.Description))
-            {
-                var descBlock = new TextBlock
-                {
-                        Text = meta.Item.Description,
-                        FontSize = 11,
-                        Margin = new Thickness(0, 2, 0, 0)
-                };
-                descBlock.SetResourceReference(TextBlock.ForegroundProperty, "AppTextMuted");
-                textPanel.Children.Add(descBlock);
+                var control = CreateControl(meta);
+                Grid.SetColumn(control, 0);
+                control.HorizontalAlignment = HorizontalAlignment.Stretch;
+
+                grid.Children.Add(control);
+
+                // 缓存映射
+                m_controlMap[meta.Property] = control;
             }
+            else
+            {
+                // 普通控件：左右布局
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            Grid.SetColumn(textPanel, 0);
-            grid.Children.Add(textPanel);
+                // 左侧：标题 + 描述
+                var textPanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
 
-            // 右侧：控件
-            var control = CreateControl(meta);
-            Grid.SetColumn(control, 1);
-            control.VerticalAlignment = VerticalAlignment.Center;
-            control.HorizontalAlignment = HorizontalAlignment.Right;
+                var titleBlock = new TextBlock
+                {
+                        Text = meta.Item.DisplayName,
+                        FontSize = 13
+                };
+                titleBlock.SetResourceReference(TextBlock.ForegroundProperty, "AppText");
+                textPanel.Children.Add(titleBlock);
 
-            grid.Children.Add(control);
+                if (!string.IsNullOrEmpty(meta.Item.Description))
+                {
+                    var descBlock = new TextBlock
+                    {
+                            Text = meta.Item.Description,
+                            FontSize = 11,
+                            Margin = new Thickness(0, 2, 0, 0)
+                    };
+                    descBlock.SetResourceReference(TextBlock.ForegroundProperty, "AppTextMuted");
+                    textPanel.Children.Add(descBlock);
+                }
 
-            // 缓存映射
-            m_controlMap[meta.Property] = control;
+                Grid.SetColumn(textPanel, 0);
+                grid.Children.Add(textPanel);
+
+                // 右侧：控件
+                var control = CreateControl(meta);
+                Grid.SetColumn(control, 1);
+                control.VerticalAlignment = VerticalAlignment.Center;
+                control.HorizontalAlignment = HorizontalAlignment.Right;
+
+                grid.Children.Add(control);
+
+                // 缓存映射
+                m_controlMap[meta.Property] = control;
+            }
 
             return grid;
         }
@@ -192,6 +213,7 @@ namespace GameImpact.UI.Settings
                     SettingsControlType.TextBox => CreateTextBoxControl(meta),
                     SettingsControlType.ComboBox => CreateComboBoxControl(meta),
                     SettingsControlType.Slider => CreateSliderControl(meta),
+                    SettingsControlType.CheckBoxGroup => CreateCheckBoxGroupControl(meta),
                     _ => CreateTextBoxControl(meta)
             };
         }
@@ -211,7 +233,18 @@ namespace GameImpact.UI.Settings
                 return SettingsControlType.Toggle;
             }
 
-            if (propType.IsEnum || (propType == typeof(string) && !string.IsNullOrEmpty(meta.Item.Options)))
+            if (propType.IsEnum)
+            {
+                // 检查是否是 Flags 枚举
+                var hasFlagsAttribute = propType.IsDefined(typeof(FlagsAttribute), false);
+                if (hasFlagsAttribute)
+                {
+                    return SettingsControlType.CheckBoxGroup;
+                }
+                return SettingsControlType.ComboBox;
+            }
+
+            if (propType == typeof(string) && !string.IsNullOrEmpty(meta.Item.Options))
             {
                 return SettingsControlType.ComboBox;
             }
@@ -335,6 +368,144 @@ namespace GameImpact.UI.Settings
             return comboBox;
         }
 
+        /// <summary>创建复选框组控件（用于 Flags 枚举的多选）</summary>
+        private FrameworkElement CreateCheckBoxGroupControl(SettingsItemMetadata meta)
+        {
+            var propType = meta.Property.PropertyType;
+            if (!propType.IsEnum)
+            {
+                return new StackPanel();
+            }
+
+            // 获取所有有效的枚举值（排除 0 和组合值）
+            var enumValues = Enum.GetValues(propType);
+            var optionsMap = ParseOptions(meta.Item.Options);
+            var currentValue = (Enum)meta.Property.GetValue(m_settings)!;
+
+            var validOptions = new List<(Enum value, string displayText)>();
+            foreach (var enumValue in enumValues)
+            {
+                var enumIntValue = Convert.ToInt32(enumValue);
+                if (enumIntValue == 0)
+                {
+                    continue; // 跳过 0 值
+                }
+
+                // 检查是否是 2 的幂（单个标志位）
+                if ((enumIntValue & (enumIntValue - 1)) != 0)
+                {
+                    continue; // 跳过组合值
+                }
+
+                var name = enumValue?.ToString() ?? string.Empty;
+                var displayText = optionsMap.TryGetValue(name, out var custom) ? custom : name;
+                validOptions.Add(((Enum)enumValue, displayText));
+            }
+
+            // 创建主容器：垂直布局，包含标题和复选框网格
+            var mainPanel = new StackPanel
+            {
+                    Orientation = Orientation.Vertical,
+                    HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+
+            // 添加标题
+            var titleBlock = new TextBlock
+            {
+                    Text = meta.Item.DisplayName,
+                    FontSize = 13,
+                    FontWeight = FontWeights.SemiBold,
+                    Margin = new Thickness(0, 0, 0, 4)
+            };
+            titleBlock.SetResourceReference(TextBlock.ForegroundProperty, "AppText");
+            mainPanel.Children.Add(titleBlock);
+
+            // 添加描述（如果有）
+            if (!string.IsNullOrEmpty(meta.Item.Description))
+            {
+                var descBlock = new TextBlock
+                {
+                        Text = meta.Item.Description,
+                        FontSize = 11,
+                        Margin = new Thickness(0, 0, 0, 8)
+                };
+                descBlock.SetResourceReference(TextBlock.ForegroundProperty, "AppTextMuted");
+                mainPanel.Children.Add(descBlock);
+            }
+
+            // 创建复选框容器：使用 WrapPanel 实现多行自动换行
+            var wrapPanel = new WrapPanel
+            {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Left
+            };
+
+            foreach (var (value, displayText) in validOptions)
+            {
+                var checkBox = new CheckBox
+                {
+                        Content = displayText,
+                        Tag = value,
+                        Margin = new Thickness(0, 4, 16, 4),
+                        VerticalAlignment = VerticalAlignment.Center
+                };
+
+                // 设置初始选中状态
+                if (currentValue != null && currentValue.HasFlag(value))
+                {
+                    checkBox.IsChecked = true;
+                }
+
+                checkBox.Checked += (s, e) => UpdateFlagsEnumValue(meta.Property, checkBox);
+                checkBox.Unchecked += (s, e) => UpdateFlagsEnumValue(meta.Property, checkBox);
+
+                wrapPanel.Children.Add(checkBox);
+            }
+
+            mainPanel.Children.Add(wrapPanel);
+
+            return mainPanel;
+        }
+
+        /// <summary>更新 Flags 枚举的值</summary>
+        private void UpdateFlagsEnumValue(PropertyInfo property, CheckBox checkBox)
+        {
+            if (m_isLoading)
+            {
+                return;
+            }
+
+            try
+            {
+                var currentValue = (Enum)property.GetValue(m_settings)!;
+                var flagValue = (Enum)checkBox.Tag!;
+                var currentIntValue = Convert.ToInt32(currentValue);
+                var flagIntValue = Convert.ToInt32(flagValue);
+
+                if (checkBox.IsChecked == true)
+                {
+                    // 添加标志
+                    currentIntValue |= flagIntValue;
+                }
+                else
+                {
+                    // 移除标志
+                    currentIntValue &= ~flagIntValue;
+                }
+
+                var newValue = Enum.ToObject(property.PropertyType, currentIntValue);
+                property.SetValue(m_settings, newValue);
+                
+                // 直接保存设置，不通过 OnControlValueChanged（避免重复保存）
+                m_settingsProvider.Save(m_settings);
+                SettingChanged?.Invoke(m_settings, property.Name);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[Settings] 更新 Flags 枚举值失败");
+            }
+        }
+
         /// <summary>创建滑动条控件</summary>
         private FrameworkElement CreateSliderControl(SettingsItemMetadata meta)
         {
@@ -399,12 +570,34 @@ namespace GameImpact.UI.Settings
         }
 
         /// <summary>将属性值设置到对应的 UI 控件</summary>
-        private static void SetControlValue(FrameworkElement control, PropertyInfo property, object? value)
+        private void SetControlValue(FrameworkElement control, PropertyInfo property, object? value)
         {
             switch (control)
             {
                 case CheckBox checkBox:
-                    checkBox.IsChecked = value is true;
+                    // 如果是 Flags 枚举的复选框，需要特殊处理
+                    if (property.PropertyType.IsEnum && property.PropertyType.IsDefined(typeof(FlagsAttribute), false))
+                    {
+                        var enumValue = (Enum)value!;
+                        var flagValue = (Enum)checkBox.Tag!;
+                        checkBox.IsChecked = enumValue.HasFlag(flagValue);
+                    }
+                    else
+                    {
+                        checkBox.IsChecked = value is true;
+                    }
+                    break;
+
+                case StackPanel stackPanel when property.PropertyType.IsEnum && property.PropertyType.IsDefined(typeof(FlagsAttribute), false):
+                    // Flags 枚举的复选框组：更新所有复选框的状态
+                    var currentEnumValue = (Enum)value!;
+                    foreach (var child in stackPanel.Children)
+                    {
+                        if (child is CheckBox cb && cb.Tag is Enum flagValue)
+                        {
+                            cb.IsChecked = currentEnumValue.HasFlag(flagValue);
+                        }
+                    }
                     break;
 
                 case ComboBox comboBox:
@@ -491,7 +684,24 @@ namespace GameImpact.UI.Settings
             switch (control)
             {
                 case CheckBox checkBox:
+                    // 如果是 Flags 枚举的复选框，已经在 UpdateFlagsEnumValue 中处理，这里不需要读取
+                    if (propType.IsEnum && propType.IsDefined(typeof(FlagsAttribute), false))
+                    {
+                        return null; // 由 UpdateFlagsEnumValue 处理
+                    }
                     return checkBox.IsChecked == true;
+
+                case StackPanel stackPanel when propType.IsEnum && propType.IsDefined(typeof(FlagsAttribute), false):
+                    // Flags 枚举的复选框组：计算所有选中的标志的组合值
+                    var combinedValue = 0;
+                    foreach (var child in stackPanel.Children)
+                    {
+                        if (child is CheckBox cb && cb.IsChecked == true && cb.Tag is Enum flagValue)
+                        {
+                            combinedValue |= Convert.ToInt32(flagValue);
+                        }
+                    }
+                    return Enum.ToObject(propType, combinedValue);
 
                 case ComboBox comboBox:
                 {

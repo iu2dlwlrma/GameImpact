@@ -3,6 +3,7 @@
 using GameImpact.Abstractions.Recognition;
 using GameImpact.Utilities.Images;
 using GameImpact.Utilities.Logging;
+using GameImpact.Utilities.Timing;
 using OpenCvSharp;
 using Rect = OpenCvSharp.Rect;
 
@@ -10,6 +11,14 @@ using Rect = OpenCvSharp.Rect;
 
 namespace GameImpact.Core.Services
 {
+    /// <summary>匹配设置接口（用于从设置中读取匹配算法配置）</summary>
+    public interface IMatchSettings
+    {
+        MatchAlgorithm MatchAlgorithms{ get; }
+        MatchCombineMode MatchCombineMode{ get; }
+        double RecognitionConfidenceThreshold{ get; }
+    }
+
     /// <summary>模板匹配结果及供 Overlay 绘制的数据。</summary>
     public sealed class TemplateMatchResult
     {
@@ -59,12 +68,14 @@ namespace GameImpact.Core.Services
     public sealed class TemplateMatchService : ITemplateMatchService
     {
         private readonly GameContext m_context;
+        private readonly IMatchSettings? m_matchSettings;
         private readonly ITemplateService m_templates;
 
-        public TemplateMatchService(GameContext context, ITemplateService templates)
+        public TemplateMatchService(GameContext context, ITemplateService templates, IMatchSettings? matchSettings = null)
         {
             m_context = context;
             m_templates = templates;
+            m_matchSettings = matchSettings;
         }
 
         public TemplateMatchResult MatchWithTemplateAndText(string? fileName, Rect? textRegion = null)
@@ -124,15 +135,26 @@ namespace GameImpact.Core.Services
 
                 using (frame)
                 {
+                    // 从设置中读取匹配算法配置，如果没有设置则使用默认值
+                    var matchAlgorithms = m_matchSettings?.MatchAlgorithms ?? MatchAlgorithm.NCC;
+                    var combineMode = m_matchSettings?.MatchCombineMode ?? MatchCombineMode.Average;
+                    var threshold = m_matchSettings?.RecognitionConfidenceThreshold ?? 0.6;
+
                     var matchOptions = new MatchOptions(
-                            0.6,
+                            threshold,
                             TemplateRegionOfInterest: matchRoi,
-                            UseEdgeMatch: true,
-                            CannyThreshold1: 50,
-                            CannyThreshold2: 150);
-                    // 克隆frame以避免MatchTemplate内部可能释放原始frame的问题
+                            MatchAlgorithms: matchAlgorithms,
+                            CombineMode: combineMode);
+                    // 克隆 frame 以避免 MatchTemplate 内部可能释放原始 frame 的问题
                     using var frameClone = frame.Clone();
-                    var result = m_context.Recognition.MatchTemplate(frameClone, template, matchOptions);
+
+                    // 计时：模板匹配耗时
+                    var (result, elapsed) = PerfTimer.Measure(() => m_context.Recognition.MatchTemplate(frameClone, template, matchOptions));
+                    Log.DebugScreen(
+                            "[识别] 模板匹配耗时: {Elapsed} ms (算法: {Algorithms}, 阈值: {Threshold:F2})",
+                            elapsed.TotalMilliseconds,
+                            matchAlgorithms,
+                            threshold);
                     if (!result.Success)
                     {
                         Log.InfoScreen("[识别] 未匹配到模板 '{File}'", fileName);
@@ -227,6 +249,11 @@ namespace GameImpact.Core.Services
 
             try
             {
+                // 从设置中读取匹配算法配置，如果没有设置则使用默认值
+                var matchAlgorithms = m_matchSettings?.MatchAlgorithms ?? MatchAlgorithm.NCC;
+                var combineMode = m_matchSettings?.MatchCombineMode ?? MatchCombineMode.Average;
+                var threshold = m_matchSettings?.RecognitionConfidenceThreshold ?? 0.6;
+
                 Rect? matchRoi = null;
                 Rect? textRoiFromConfig = null;
                 try
@@ -263,19 +290,22 @@ namespace GameImpact.Core.Services
                 {
                     // 先构造与模板匹配时相同的配置
                     var matchOptions = new MatchOptions(
-                            0.6,
+                            threshold,
                             TemplateRegionOfInterest: matchRoi,
-                            UseEdgeMatch: true,
-                            CannyThreshold1: 50,
-                            CannyThreshold2: 150);
+                            MatchAlgorithms: matchAlgorithms,
+                            CombineMode: combineMode);
 
-                    // 克隆frame以避免MatchTemplate内部可能释放原始frame的问题
-                    // MatchTemplate内部当roi不存在时，searchArea直接引用source，使用using var会释放source
+                    // 克隆 frame 以避免 MatchTemplate 内部可能释放原始 frame 的问题
                     using var frameClone = frame.Clone();
 
-                    // 先执行模板匹配，如果失败则立即返回，避免不必要的图像处理
-                    var result = m_context.Recognition.MatchTemplate(frameClone, template, matchOptions);
-                    
+                    // 计时：模板匹配耗时
+                    var (result, elapsed) = PerfTimer.Measure(() => m_context.Recognition.MatchTemplate(frameClone, template, matchOptions));
+                    Log.DebugScreen(
+                            "[识别] 模板匹配耗时: {Elapsed} ms (算法: {Algorithms}, 阈值: {Threshold:F2})",
+                            elapsed.TotalMilliseconds,
+                            matchAlgorithms,
+                            threshold);
+
                     if (!result.Success)
                     {
                         Log.InfoScreen("[识别] 未匹配到模板 '{File}'", fileName);
@@ -294,54 +324,26 @@ namespace GameImpact.Core.Services
                         };
                     }
 
-                    // MatchTemplate 可能会释放传入的 frameClone（当没有 ROI 时，searchArea 直接引用 source 并在 using 结束时释放）
-                    // 所以在调用 CreateProcessedSourceImage 之前，需要再次克隆 frame
-                    // 只有在匹配成功时才生成处理后的图像，用于调试预览
-                    // 注意：这里的 processedCaptureImage / processedMatchImage 即为模板匹配前处理后的单通道图像，
-                    // 用于 DebugWindow 中的"匹配图/捕获图预览"。
-                    try
+                    // 直接使用 MatchTemplate 返回的处理后图像，避免重复处理
+                    processedCaptureImage = result.ProcessedSourceImage;
+                    processedMatchImage = result.ProcessedTemplateImage;
+
+                    if (processedCaptureImage != null)
                     {
-                        // 重新克隆 frame，因为 frameClone 可能已被 MatchTemplate 释放
-                        using var frameForProcessing = frame.Clone();
-                        if (!frameForProcessing.IsDisposed)
-                        {
-                            processedCaptureImage = CreateProcessedSourceImage(frameForProcessing, matchOptions);
-                        }
-                        else
-                        {
-                            Log.DebugScreen("[识别] frameForProcessing 已被释放，无法创建处理后的捕获图");
-                        }
-                        if (processedCaptureImage != null)
-                        {
-                            Log.DebugScreen("[识别] 处理后的捕获图创建成功: {Width}x{Height}", processedCaptureImage.Width, processedCaptureImage.Height);
-                        }
-                        else
-                        {
-                            Log.DebugScreen("[识别] 处理后的捕获图为 null");
-                        }
+                        Log.DebugScreen("[识别] 处理后的捕获图创建成功: {Width}x{Height}", processedCaptureImage.Width, processedCaptureImage.Height);
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        Log.DebugScreen("[识别] 生成处理后的捕获图失败: {Error}", ex.Message);
-                        Log.DebugScreen("[识别] 异常堆栈: {StackTrace}", ex.StackTrace);
+                        Log.DebugScreen("[识别] 处理后的捕获图为 null", Array.Empty<object>());
                     }
 
-                    try
+                    if (processedMatchImage != null)
                     {
-                        processedMatchImage = CreateProcessedTemplateImage(template, matchOptions);
-                        if (processedMatchImage != null)
-                        {
-                            Log.DebugScreen("[识别] 处理后的匹配图创建成功: {Width}x{Height}", processedMatchImage.Width, processedMatchImage.Height);
-                        }
-                        else
-                        {
-                            Log.DebugScreen("[识别] 处理后的匹配图为 null");
-                        }
+                        Log.DebugScreen("[识别] 处理后的匹配图创建成功: {Width}x{Height}", processedMatchImage.Width, processedMatchImage.Height);
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        Log.DebugScreen("[识别] 生成处理后的匹配图失败: {Error}", ex.Message);
-                        Log.DebugScreen("[识别] 异常堆栈: {StackTrace}", ex.StackTrace);
+                        Log.DebugScreen("[识别] 处理后的匹配图为 null", Array.Empty<object>());
                     }
 
                     var rect = new Rect(result.Location.X, result.Location.Y, result.Size.Width, result.Size.Height);
@@ -444,9 +446,7 @@ namespace GameImpact.Core.Services
             }
         }
 
-        /// <summary>
-        /// 根据当前帧生成“处理后的捕获图”：灰度 + Canny 边缘，用于调试预览。
-        /// </summary>
+        /// <summary>根据当前帧生成"处理后的捕获图"：根据匹配算法处理图像，用于调试预览。</summary>
         private static Mat CreateProcessedSourceImage(Mat frame, MatchOptions options)
         {
             var gray = new Mat();
@@ -469,16 +469,10 @@ namespace GameImpact.Core.Services
                 Cv2.CvtColor(frame, gray, ColorConversionCodes.BGR2GRAY);
             }
 
-            // 根据 MatchOptions 决定最终用于匹配的图像形态
-            if (options.UseBinaryMatch)
-            {
-                var binary = new Mat();
-                Cv2.Threshold(gray, binary, options.BinaryThreshold, 255, ThresholdTypes.Binary);
-                gray.Dispose();
-                return binary;
-            }
+            // 根据 MatchAlgorithms 决定最终用于匹配的图像形态（优先使用第一个算法）
+            var algorithms = options.MatchAlgorithms == MatchAlgorithm.None ? MatchAlgorithm.NCC : options.MatchAlgorithms;
 
-            if (options.UseEdgeMatch)
+            if ((algorithms & MatchAlgorithm.Edge) == MatchAlgorithm.Edge)
             {
                 var edges = new Mat();
                 Cv2.Canny(gray, edges, options.CannyThreshold1, options.CannyThreshold2);
@@ -490,18 +484,16 @@ namespace GameImpact.Core.Services
             return gray;
         }
 
-        /// <summary>
-        /// 根据模板生成“处理后的匹配图”：灰度 + Canny 边缘（可选模板 ROI），用于调试预览。
-        /// </summary>
+        /// <summary>根据模板生成"处理后的匹配图"：根据匹配算法处理图像（可选模板 ROI），用于调试预览。</summary>
         private static Mat CreateProcessedTemplateImage(Mat template, MatchOptions options)
         {
-            Mat source = template;
+            var source = template;
             Mat? roiMat = null;
 
             // 如果指定了模板 ROI，则只处理模板中的该区域
             if (options.TemplateRegionOfInterest.HasValue &&
-                options.TemplateRegionOfInterest.Value.Width > 0 &&
-                options.TemplateRegionOfInterest.Value.Height > 0)
+                    options.TemplateRegionOfInterest.Value.Width > 0 &&
+                    options.TemplateRegionOfInterest.Value.Height > 0)
             {
                 roiMat = new Mat(template, options.TemplateRegionOfInterest.Value);
                 source = roiMat;
@@ -528,15 +520,10 @@ namespace GameImpact.Core.Services
 
             roiMat?.Dispose();
 
-            if (options.UseBinaryMatch)
-            {
-                var binary = new Mat();
-                Cv2.Threshold(gray, binary, options.BinaryThreshold, 255, ThresholdTypes.Binary);
-                gray.Dispose();
-                return binary;
-            }
+            // 根据 MatchAlgorithms 决定最终用于匹配的图像形态（优先使用第一个算法）
+            var algorithms = options.MatchAlgorithms == MatchAlgorithm.None ? MatchAlgorithm.NCC : options.MatchAlgorithms;
 
-            if (options.UseEdgeMatch)
+            if ((algorithms & MatchAlgorithm.Edge) == MatchAlgorithm.Edge)
             {
                 var edges = new Mat();
                 Cv2.Canny(gray, edges, options.CannyThreshold1, options.CannyThreshold2);

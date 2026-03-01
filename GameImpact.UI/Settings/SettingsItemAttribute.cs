@@ -22,7 +22,10 @@ namespace GameImpact.UI.Settings
         ComboBox,
 
         /// <summary>滑动条</summary>
-        Slider
+        Slider,
+
+        /// <summary>复选框组（用于 Flags 枚举的多选）</summary>
+        CheckBoxGroup
     }
     /// <summary>标注在 Settings 模型的属性上，描述该设置项在 UI 中的显示方式。 未标注此 Attribute 的属性不会出现在自动生成的设置界面中。</summary>
     [AttributeUsage(AttributeTargets.Property)]
