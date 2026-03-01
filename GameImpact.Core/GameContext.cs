@@ -9,7 +9,7 @@ using GameImpact.Capture;
 using GameImpact.Hotkey;
 using GameImpact.Input;
 using GameImpact.OCR;
-using GameImpact.Recognition;
+using GameImpact.Vision;
 using GameImpact.Utilities.Logging;
 
 #endregion

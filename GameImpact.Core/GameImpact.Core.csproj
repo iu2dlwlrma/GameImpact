@@ -17,7 +17,7 @@
         <ProjectReference Include="..\GameImpact.Capture\GameImpact.Capture.csproj"/>
         <ProjectReference Include="..\GameImpact.Input\GameImpact.Input.csproj"/>
         <ProjectReference Include="..\GameImpact.Hotkey\GameImpact.Hotkey.csproj"/>
-        <ProjectReference Include="..\GameImpact.Recognition\GameImpact.Recognition.csproj"/>
+        <ProjectReference Include="..\GameImpact.Vision\GameImpact.Vision.csproj"/>
         <ProjectReference Include="..\GameImpact.Automation\GameImpact.Automation.csproj"/>
         <ProjectReference Include="..\GameImpact.OCR\GameImpact.OCR.csproj"/>
     </ItemGroup>

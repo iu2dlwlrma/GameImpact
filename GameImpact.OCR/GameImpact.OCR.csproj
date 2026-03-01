@@ -12,6 +12,6 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\GameImpact.Abstractions\GameImpact.Abstractions.csproj"/>
-        <ProjectReference Include="..\GameImpact.ImageProcessing\GameImpact.ImageProcessing.csproj"/>
+        <ProjectReference Include="..\GameImpact.Vision\GameImpact.Vision.csproj"/>
     </ItemGroup>
 </Project>

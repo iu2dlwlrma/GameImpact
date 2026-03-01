@@ -2,6 +2,7 @@
 
 using System.Reflection;
 using System.Text.Json;
+using GameImpact.Utilities.Images;
 using OpenCvSharp;
 
 #endregion
@@ -52,7 +53,8 @@ namespace GameImpact.Core.Services
         public void SaveTemplate(Mat image, string relativeFilePath)
         {
             EnsureTemplatesFolder();
-            Cv2.ImWrite(Path.Combine(TemplatesFolderPath, relativeFilePath), image);
+            var path = Path.Combine(TemplatesFolderPath, relativeFilePath);
+            ImageHelper.SaveToFile(image, path);
         }
 
         public (Rect? matchRoi, Rect? textRoi) LoadTemplateRoi(string templateFileName)

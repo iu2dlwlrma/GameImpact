@@ -1,4 +1,5 @@
 using GameImpact.Abstractions.Recognition;
+using GameImpact.Utilities.Images;
 using GameImpact.Utilities.Logging;
 using OpenCvSharp;
 using Rect = OpenCvSharp.Rect;
@@ -82,7 +83,7 @@ namespace GameImpact.Core.Services
                     textRegion = textRoiFromConfig;
                 }
 
-                using var template = Cv2.ImRead(path);
+                using var template = ImageHelper.LoadFromFile(path);
                 if (template.Empty())
                 {
                     Log.WarnScreen("[识别] 无法读取模板: {File}", fileName);

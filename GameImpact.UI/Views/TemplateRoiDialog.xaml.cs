@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using GameImpact.Utilities.Images;
 using OpenCvSharp;
 
 #endregion
@@ -72,7 +73,7 @@ namespace GameImpact.UI.Views
                     return;
                 }
 
-                using var mat = Cv2.ImRead(m_templatePath);
+                using var mat = ImageHelper.LoadFromFile(m_templatePath);
                 if (mat.Empty())
                 {
                     return;

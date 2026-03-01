@@ -10,7 +10,7 @@ using GameImpact.Core.Services;
 using GameImpact.Core.Windowing;
 using GameImpact.Hotkey;
 using GameImpact.Input;
-using GameImpact.Recognition;
+using GameImpact.Vision;
 using Microsoft.Extensions.DependencyInjection;
 
 #endregion

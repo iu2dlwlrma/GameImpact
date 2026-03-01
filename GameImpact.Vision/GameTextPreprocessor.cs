@@ -5,7 +5,7 @@ using OpenCvSharp;
 
 #endregion
 
-namespace GameImpact.ImageProcessing
+namespace GameImpact.Vision
 {
     /// <summary>游戏文字图像预处理器，用于提升 OCR 识别率</summary>
     public static class GameTextPreprocessor
@@ -17,7 +17,7 @@ namespace GameImpact.ImageProcessing
             {
                 return new Mat();
             }
-
+            
             using var bgr = EnsureBgr(image);
 
             // 放大小图以提升小字识别率

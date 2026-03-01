@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using GameImpact.Abstractions.Recognition;
-using GameImpact.ImageProcessing;
+using GameImpact.Vision;
 using OpenCvSharp;
 using PaddleOCRSharp;
 

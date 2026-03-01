@@ -1,18 +1,13 @@
-#region
-
+using System;
+using System.IO;
 using OpenCvSharp;
 
-#endregion
-
-namespace GameImpact.Recognition
+namespace GameImpact.Utilities.Images
 {
-    /// <summary>图像处理辅助类</summary>
+    /// <summary>跨项目通用的图像 IO / 基础处理工具。</summary>
     public static class ImageHelper
     {
-        /// <summary>从文件加载图像</summary>
-        /// <param name="path">文件路径</param>
-        /// <param name="mode">读取模式</param>
-        /// <returns>图像矩阵</returns>
+        /// <summary>从文件加载图像（带 FileNotFound 检查）。</summary>
         public static Mat LoadFromFile(string path, ImreadModes mode = ImreadModes.Color)
         {
             if (!File.Exists(path))
@@ -22,9 +17,7 @@ namespace GameImpact.Recognition
             return Cv2.ImRead(path, mode);
         }
 
-        /// <summary>保存图像到文件</summary>
-        /// <param name="mat">图像矩阵</param>
-        /// <param name="path">保存路径</param>
+        /// <summary>保存图像到文件（自动创建目录）。</summary>
         public static void SaveToFile(Mat mat, string path)
         {
             var dir = Path.GetDirectoryName(path);
@@ -35,28 +28,21 @@ namespace GameImpact.Recognition
             Cv2.ImWrite(path, mat);
         }
 
-        /// <summary>从Base64字符串加载图像</summary>
-        /// <param name="base64">Base64编码的图像数据</param>
-        /// <returns>图像矩阵</returns>
+        /// <summary>从 Base64 字符串加载图像。</summary>
         public static Mat LoadFromBase64(string base64)
         {
             var bytes = Convert.FromBase64String(base64);
             return Cv2.ImDecode(bytes, ImreadModes.Color);
         }
 
-        /// <summary>将图像转换为Base64字符串</summary>
-        /// <param name="mat">图像矩阵</param>
-        /// <param name="ext">文件扩展名</param>
-        /// <returns>Base64编码的字符串</returns>
+        /// <summary>将图像编码为 Base64 字符串（默认 PNG）。</summary>
         public static string ToBase64(Mat mat, string ext = ".png")
         {
             Cv2.ImEncode(ext, mat, out var bytes);
             return Convert.ToBase64String(bytes);
         }
 
-        /// <summary>转换为灰度图像</summary>
-        /// <param name="mat">输入图像</param>
-        /// <returns>灰度图像</returns>
+        /// <summary>转换为灰度图像（若已是灰度则 Clone）。</summary>
         public static Mat ToGray(Mat mat)
         {
             if (mat.Channels() == 1)
@@ -68,10 +54,7 @@ namespace GameImpact.Recognition
             return gray;
         }
 
-        /// <summary>缩放图像</summary>
-        /// <param name="mat">输入图像</param>
-        /// <param name="scale">缩放比例</param>
-        /// <returns>缩放后的图像</returns>
+        /// <summary>按比例缩放图像。</summary>
         public static Mat Resize(Mat mat, double scale)
         {
             var result = new Mat();
@@ -79,13 +62,11 @@ namespace GameImpact.Recognition
             return result;
         }
 
-        /// <summary>裁剪图像</summary>
-        /// <param name="mat">输入图像</param>
-        /// <param name="rect">裁剪区域</param>
-        /// <returns>裁剪后的图像</returns>
+        /// <summary>裁剪图像（不做边界检查）。</summary>
         public static Mat Crop(Mat mat, Rect rect)
         {
             return new Mat(mat, rect);
         }
     }
 }
+

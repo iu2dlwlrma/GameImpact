@@ -1,12 +1,13 @@
 #region
 
+using System.Collections.Generic;
 using GameImpact.Abstractions.Recognition;
 using GameImpact.Utilities.Logging;
 using OpenCvSharp;
 
 #endregion
 
-namespace GameImpact.Recognition
+namespace GameImpact.Vision
 {
     /// <summary>图像识别服务实现，提供模板匹配和颜色匹配功能</summary>
     public class RecognitionService : IRecognitionService
