@@ -1,10 +1,15 @@
-using System;
-using System.IO;
+#region
+
+using System.Runtime.InteropServices;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using OpenCvSharp;
+
+#endregion
 
 namespace GameImpact.Utilities.Images
 {
-    /// <summary>跨项目通用的图像 IO / 基础处理工具。</summary>
+    /// <summary>通用的图像 IO / 基础处理工具。</summary>
     public static class ImageHelper
     {
         /// <summary>从文件加载图像（带 FileNotFound 检查）。</summary>
@@ -67,6 +72,58 @@ namespace GameImpact.Utilities.Images
         {
             return new Mat(mat, rect);
         }
+
+        /// <summary>将 Mat 转换为 BitmapSource</summary>
+        public static BitmapSource MatToBitmapSource(Mat? mat)
+        {
+            if (mat == null || mat.Empty())
+            {
+                return null!;
+            }
+
+            Mat? rgba = null;
+            try
+            {
+                if (mat.Channels() == 3)
+                {
+                    rgba = new Mat();
+                    Cv2.CvtColor(mat, rgba, ColorConversionCodes.BGR2BGRA);
+                }
+                else if (mat.Channels() == 4)
+                {
+                    rgba = mat;
+                }
+                else
+                {
+                    rgba = new Mat();
+                    Cv2.CvtColor(mat, rgba, ColorConversionCodes.GRAY2BGRA);
+                }
+
+                var width = rgba.Width;
+                var height = rgba.Height;
+                var stride = rgba.Step();
+
+                var data = new byte[height * stride];
+                Marshal.Copy(rgba.Data, data, 0, data.Length);
+
+                var bitmap = BitmapSource.Create(
+                        width, height,
+                        96, 96,
+                        PixelFormats.Bgra32,
+                        null,
+                        data,
+                        (int)stride);
+
+                bitmap.Freeze();
+                return bitmap;
+            }
+            finally
+            {
+                if (rgba != null && rgba != mat)
+                {
+                    rgba.Dispose();
+                }
+            }
+        }
     }
 }
-

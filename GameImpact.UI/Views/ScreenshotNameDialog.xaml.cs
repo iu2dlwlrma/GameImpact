@@ -4,20 +4,23 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using GameImpact.Utilities.Logging;
 using OpenCvSharp;
+using Window = System.Windows.Window;
 
 #endregion
 
 namespace GameImpact.UI.Views
 {
     /// <summary>截图命名对话框，包含图片预览</summary>
-    public partial class ScreenshotNameDialog : System.Windows.Window
+    public partial class ScreenshotNameDialog : Window
     {
-        private readonly Mat m_screenshot;
         private readonly string m_defaultFileName;
+        private readonly Mat m_screenshot;
 
         /// <summary>构造函数</summary>
         /// <param name="screenshot">截图的 Mat 对象</param>
@@ -41,13 +44,13 @@ namespace GameImpact.UI.Views
             {
                 if (e.Key == Key.Enter && SaveButton.IsEnabled)
                 {
-                    SaveButton_Click(sender: null, e: null);
+                    SaveButton_Click(null, null);
                 }
             };
         }
 
         /// <summary>保存的文件路径</summary>
-        public string? SavedFilePath { get; private set; }
+        public string? SavedFilePath{ get; private set; }
 
         /// <summary>标题栏鼠标左键按下事件处理</summary>
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -75,7 +78,7 @@ namespace GameImpact.UI.Views
             catch (Exception ex)
             {
                 // 预览加载失败不影响保存
-                System.Diagnostics.Debug.WriteLine($"[ScreenshotNameDialog] 预览加载失败: {ex.Message}");
+                Log.Debug($"[ScreenshotNameDialog] 预览加载失败: {ex.Message}");
             }
         }
 
@@ -111,18 +114,18 @@ namespace GameImpact.UI.Views
                 var width = rgba.Width;
                 var height = rgba.Height;
                 var stride = rgba.Step();
-                
+
                 // 将 Mat 数据复制到字节数组
                 var data = new byte[height * stride];
                 Marshal.Copy(rgba.Data, data, 0, data.Length);
 
                 var bitmap = BitmapSource.Create(
-                    width, height,
-                    96, 96, // DPI
-                    PixelFormats.Bgra32,
-                    null,
-                    data,
-                    (int)stride);
+                        width, height,
+                        96, 96, // DPI
+                        PixelFormats.Bgra32,
+                        null,
+                        data,
+                        (int)stride);
 
                 // 冻结 BitmapSource 以便跨线程使用，并确保数据被复制
                 bitmap.Freeze();
@@ -139,7 +142,7 @@ namespace GameImpact.UI.Views
         }
 
         /// <summary>文件名输入框文本变更事件处理</summary>
-        private void FileNameBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        private void FileNameBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             ValidateFileName();
         }

@@ -174,7 +174,7 @@ namespace GameImpact.Input
             var lParam = 1 | ((nint)scan << 16);
             if (isKeyUp)
             {
-                lParam |= (nint)0xC0000000; // bits 30 + 31
+                lParam |= unchecked((nint)0xC0000000); // bits 30 + 31
             }
 
             var result = NativeMethods.PostMessage(m_hWnd, msg, (nint)key, lParam);

@@ -1,5 +1,6 @@
 #region
 
+using System.Threading.Tasks;
 using GameImpact.Abstractions.Capture;
 using GameImpact.Abstractions.Hotkey;
 using GameImpact.Abstractions.Input;
@@ -19,14 +20,40 @@ namespace GameImpact.Core
     /// <summary>游戏上下文，管理屏幕捕获、输入模拟、OCR识别、热键等核心服务</summary>
     public class GameContext : IDisposable
     {
+        private readonly Task<WindowsOcrEngine?> m_ocrTask;
+        private WindowsOcrEngine? m_ocr;
+        private readonly object m_ocrLock = new();
+
         /// <summary>构造函数</summary>
         public GameContext()
         {
+            Log.Debug("[GameContext] Creating...");
             Input = InputFactory.CreateSendInput();
+            Log.Debug("[GameContext] Input created");
             Hotkey = new HotkeyService();
+            Log.Debug("[GameContext] Hotkey created");
             Recognition = new RecognitionService();
-            Ocr = new WindowsOcrEngine();
+            Log.Debug("[GameContext] Recognition created");
+            // OCR 引擎异步加载，避免阻塞启动
+            // 注意：Windows OCR API 可能需要 STA 线程模型，如果后台创建失败，将延迟到首次使用时创建
+            Log.Debug("[GameContext] Starting OCR engine async initialization...");
+            m_ocrTask = Task.Run(() =>
+            {
+                try
+                {
+                    Log.Debug("[GameContext] Creating OCR engine in background thread...");
+                    var engine = new WindowsOcrEngine();
+                    Log.Debug("[GameContext] OCR engine created successfully");
+                    return engine;
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn("[GameContext] Failed to create OCR engine in background: {Message}. Will create on first use.", ex.Message);
+                    return null; // 返回 null，表示需要延迟创建
+                }
+            });
             TaskEngine = new TaskEngine();
+            Log.Debug("[GameContext] TaskEngine created");
             Log.Debug("[GameContext] Created");
         }
         /// <summary>目标窗口句柄</summary>
@@ -44,8 +71,36 @@ namespace GameImpact.Core
         /// <summary>图像识别服务</summary>
         public IRecognitionService Recognition{ get; }
 
-        /// <summary>OCR识别引擎</summary>
-        public IOcrEngine Ocr{ get; }
+        /// <summary>OCR识别引擎（异步加载）</summary>
+        public IOcrEngine Ocr
+        {
+            get
+            {
+                if (m_ocr == null)
+                {
+                    lock (m_ocrLock)
+                    {
+                        if (m_ocr == null)
+                        {
+                            // 等待异步任务完成
+                            var result = m_ocrTask.GetAwaiter().GetResult();
+                            if (result != null)
+                            {
+                                m_ocr = result;
+                            }
+                            else
+                            {
+                                // 如果后台创建失败，在当前线程（通常是 UI 线程，STA）中创建
+                                Log.Debug("[GameContext] Creating OCR engine in current thread (fallback)...");
+                                m_ocr = new WindowsOcrEngine();
+                                Log.Debug("[GameContext] OCR engine created successfully (fallback)");
+                            }
+                        }
+                    }
+                }
+                return m_ocr;
+            }
+        }
 
         /// <summary>自动化任务引擎</summary>
         public TaskEngine TaskEngine{ get; }
@@ -60,7 +115,47 @@ namespace GameImpact.Core
             TaskEngine.Dispose();
             Capture?.Dispose();
             Hotkey.Dispose();
-            Ocr.Dispose();
+            // 等待 OCR 引擎加载完成后再释放
+            try
+            {
+                lock (m_ocrLock)
+                {
+                    if (m_ocr != null)
+                    {
+                        m_ocr.Dispose();
+                    }
+                    else if (m_ocrTask.IsCompleted)
+                    {
+                        if (m_ocrTask.IsCompletedSuccessfully)
+                        {
+                            var result = m_ocrTask.Result;
+                            if (result != null)
+                            {
+                                result.Dispose();
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // 如果还在加载中，等待一小段时间
+                        if (m_ocrTask.Wait(1000))
+                        {
+                            if (m_ocrTask.IsCompletedSuccessfully)
+                            {
+                                var result = m_ocrTask.Result;
+                                if (result != null)
+                                {
+                                    result.Dispose();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("[GameContext] Error disposing OCR engine: {Message}", ex.Message);
+            }
             Log.Info("[GameContext] Disposed");
             GC.SuppressFinalize(this);
         }

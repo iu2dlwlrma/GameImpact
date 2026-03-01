@@ -4,16 +4,15 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using GameImpact.Core;
 using GameImpact.Core.Windowing;
+using GameImpact.UI.Models;
 using GameImpact.UI.Services;
-using GameImpact.UI.Views;
 using GameImpact.UI.Settings;
+using GameImpact.UI.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -142,7 +141,7 @@ namespace GameImpact.UI
 
                 // 构建应用设置页签（按分组自动拆分子页签）
                 var settingsProvider = m_host.Services.GetRequiredService<ISettingsProvider<AppSettings>>();
-                var appPage = SettingsPageBuilder.Build<AppSettings>(
+                var appPage = SettingsPageBuilder.Build(
                         settingsProvider,
                         "应用设置",
                         "📱",
@@ -260,9 +259,9 @@ namespace GameImpact.UI
                             // 等待进程真正启动，获取到有效的窗口句柄
                             const int maxWaitTime = 30000; // 30秒超时
                             const int checkInterval = 1000; // 每1s检查一次
-                            nint hWnd = nint.Zero;
-                            string title = "";
-                            string processName = "";
+                            var hWnd = nint.Zero;
+                            var title = "";
+                            var processName = "";
                             var elapsed = 0;
 
                             while (elapsed < maxWaitTime)
@@ -315,7 +314,7 @@ namespace GameImpact.UI
                             // 如果进程已退出，说明启动失败
                             if (process.HasExited)
                             {
-                                Current.Dispatcher.InvokeAsync(() =>
+                                await Current.Dispatcher.InvokeAsync(() =>
                                 {
                                     m_isStartingGame = false;
                                     model.StatusMessage = "游戏进程已退出";
@@ -326,7 +325,7 @@ namespace GameImpact.UI
                             // 如果超时仍未获取到窗口句柄
                             if (hWnd == nint.Zero)
                             {
-                                Current.Dispatcher.InvokeAsync(() =>
+                                await Current.Dispatcher.InvokeAsync(() =>
                                 {
                                     m_isStartingGame = false;
                                     model.StatusMessage = "启动超时：无法获取游戏窗口";
@@ -335,7 +334,7 @@ namespace GameImpact.UI
                             }
 
                             // 设置窗口信息
-                            Current.Dispatcher.InvokeAsync(() =>
+                            await Current.Dispatcher.InvokeAsync(() =>
                             {
                                 m_isStartingGame = false;
                                 args.SetWindow(hWnd, title, processName);
@@ -343,7 +342,7 @@ namespace GameImpact.UI
                         }
                         catch (Exception ex)
                         {
-                            Current.Dispatcher.InvokeAsync(() =>
+                            await Current.Dispatcher.InvokeAsync(() =>
                             {
                                 m_isStartingGame = false;
                                 model.StatusMessage = $"等待游戏启动时出错: {ex.Message}";
@@ -372,7 +371,10 @@ namespace GameImpact.UI
         }
 
         /// <summary>子类覆写以提供相对于游戏根目录的启动路径</summary>
-        protected virtual string? GetGameExecutFilePath() => null;
+        protected virtual string? GetGameExecutFilePath()
+        {
+            return null;
+        }
 
 #endregion
     }

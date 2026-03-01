@@ -2,7 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -22,7 +21,7 @@ using Rect = OpenCvSharp.Rect;
 
 #endregion
 
-namespace GameImpact.UI
+namespace GameImpact.UI.Models
 {
     /// <summary>主视图模型，管理窗口选择、屏幕捕获、OCR识别等核心功能</summary>
     public partial class MainModel : ObservableObject
@@ -58,9 +57,6 @@ namespace GameImpact.UI
         private nint m_hWnd;
         private string m_windowTitle = "";
 
-        /// <summary>点击「启动」但当前未选择窗口时触发，宿主可尝试自动查找/启动游戏并调用 args.SetWindow 后继续启动。</summary>
-        public event EventHandler<StartRequestedWhenNoWindowEventArgs>? StartRequestedWhenNoWindow;
-
         /// <summary>构造函数</summary>
         public MainModel(GameContext context,
                 IWindowEnumerator windowEnumerator,
@@ -87,6 +83,12 @@ namespace GameImpact.UI
             m_logTimer.Start();
         }
 
+        /// <summary>模板文件夹路径（供 Debug 等 UI 使用）。</summary>
+        public string TemplatesFolderPath => m_templates.TemplatesFolderPath;
+
+        /// <summary>点击「启动」但当前未选择窗口时触发，宿主可尝试自动查找/启动游戏并调用 args.SetWindow 后继续启动。</summary>
+        public event EventHandler<StartRequestedWhenNoWindowEventArgs>? StartRequestedWhenNoWindow;
+
         partial void OnStatusMessageChanged(string value)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -96,9 +98,6 @@ namespace GameImpact.UI
             m_statusTips.Push(value);
             Log.Debug("[状态] {Message}", value);
         }
-
-        /// <summary>模板文件夹路径（供 Debug 等 UI 使用）。</summary>
-        public string TemplatesFolderPath => m_templates.TemplatesFolderPath;
 
         /// <summary>接收日志消息（仅DEBUG模式）</summary>
         /// <param name="level">日志级别</param>
@@ -161,133 +160,6 @@ namespace GameImpact.UI
             PreviewResolution = m_previewController.PreviewResolution;
             StatusText = m_previewController.StatusText;
         }
-
-
-#region 窗口相关
-
-        public bool SetProcess(IWindowEnumerator enumerator, string processName, string processTitle)
-        {
-            try
-            {
-                var win = WindowFinder.FindByProcessNameAndProcessTitle(enumerator, processName, processTitle);
-                if (win != null)
-                {
-                    SetSelectedWindow(win.Handle, win.Title, win.ProcessName);
-                    return true;
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Warn("[{AppName} - {AppTitle}] 自动查找进程: {Ex}", processName, processTitle, ex.Message);
-            }
-            return false;
-        }
-        [RelayCommand]
-        private void SelectWindow()
-        {
-            var dialog = new WindowSelectDialog(m_windowEnumerator);
-
-            // 设置 Owner 为主窗口，使对话框居中显示
-            var mainWindow = Application.Current.MainWindow;
-            if (mainWindow != null)
-            {
-                dialog.Owner = mainWindow;
-            }
-
-            if (dialog.ShowDialog() == true && dialog.SelectedWindow != null)
-            {
-                ApplySelectedWindow(dialog.SelectedWindow.Handle, dialog.SelectedWindow.Title, dialog.SelectedWindow.ProcessName);
-                Log.InfoScreen("[UI] 选择窗口: {Process} ({Handle})", dialog.SelectedWindow.ProcessName, dialog.SelectedWindow.HandleText);
-            }
-        }
-
-        /// <summary>由宿主或自动查找逻辑调用，将指定窗口设为当前选择（不启动捕获）。</summary>
-        public void SetSelectedWindow(nint hWnd, string title, string processName)
-        {
-            ApplySelectedWindow(hWnd, title, processName);
-        }
-
-        private void ApplySelectedWindow(nint hWnd, string title, string processName)
-        {
-            m_hWnd = hWnd;
-            m_windowTitle = title;
-            WindowDisplayText = string.IsNullOrEmpty(title) ? processName : title;
-            StartCapture();
-        }
-
-        [RelayCommand]
-        private void ToggleCapture()
-        {
-            if (IsCapturing)
-            {
-                StopCapture();
-            }
-            else
-            {
-                if (m_hWnd == nint.Zero)
-                {
-                    var args = new StartRequestedWhenNoWindowEventArgs(ApplySelectedWindow);
-                    StartRequestedWhenNoWindow?.Invoke(this, args);
-                    if (m_hWnd == nint.Zero)
-                    {
-                        return;
-                    }
-                }
-                StartCapture();
-            }
-        }
-
-        /// <summary>开始捕获（宿主在异步设置窗口后可调用以自动开始）。</summary>
-        public void StartCapture()
-        {
-            if (m_hWnd == nint.Zero)
-            {
-                StatusMessage = "请先选择窗口";
-                return;
-            }
-
-            try
-            {
-                m_context.Initialize(m_hWnd, useGpuHdrConversion: UseGpuHdrConversion);
-
-                IsCapturing = true;
-                IsIdle = false;
-                CaptureButtonText = "停止";
-                Log.InfoScreen("[UI] 开始捕获 (GPU HDR: {UseGpu})", UseGpuHdrConversion ? "开启" : "关闭");
-
-                // 启动 Overlay 窗口
-                m_overlay.AttachTo(m_hWnd);
-
-                m_previewController.StartRendering();
-                SyncPreviewFromController();
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = $"启动失败: {ex.Message}";
-                Log.ErrorScreen(ex, "[UI] 启动捕获失败");
-            }
-        }
-
-        private void StopCapture()
-        {
-            m_previewController.StopRendering();
-            m_context.Capture?.Stop();
-
-            // 关闭 Overlay
-            m_overlay.Detach();
-
-            IsCapturing = false;
-            IsIdle = true;
-            CaptureButtonText = "启动";
-            StatusText = "";
-            StatusMessage = "已停止";
-            PreviewSource = null;
-            PreviewFps = "-";
-            PreviewResolution = "-";
-            Log.InfoScreen("[UI] 停止捕获");
-        }
-
-#endregion
 
         public void ClearLog()
         {
@@ -535,9 +407,151 @@ namespace GameImpact.UI
             return (r.Found, r.CenterX, r.CenterY, r.Confidence, r.Text);
         }
 
+        /// <summary>用当前画面与指定模板匹配，并返回处理后的图像。返回是否找到、中心坐标、置信度和处理后的图像。</summary>
+        public (bool found, int centerX, int centerY, double confidence, Mat? matchImage, Mat? captureImage) MatchWithTemplateAndGetImages(string? fileName)
+        {
+            var r = m_templateMatch.MatchWithTemplateAndGetImages(fileName);
+            if (r.Found)
+            {
+                m_overlay.DrawOcrResult(r.MatchDraw.roi, r.MatchDraw.draw);
+                if (r.TextDraw.HasValue)
+                {
+                    m_overlay.DrawOcrResult(r.TextDraw.Value.roi, r.TextDraw.Value.draw);
+                }
+            }
+            return (r.Found, r.CenterX, r.CenterY, r.Confidence, r.ProcessedMatchImage, r.ProcessedCaptureImage);
+        }
+
         public void Cleanup()
         {
             m_overlay.ForceClose();
         }
+
+
+#region 窗口相关
+
+        public bool SetProcess(IWindowEnumerator enumerator, string processName, string processTitle)
+        {
+            try
+            {
+                var win = WindowFinder.FindByProcessNameAndProcessTitle(enumerator, processName, processTitle);
+                if (win != null)
+                {
+                    SetSelectedWindow(win.Handle, win.Title, win.ProcessName);
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("[{AppName} - {AppTitle}] 自动查找进程: {Ex}", processName, processTitle, ex.Message);
+            }
+            return false;
+        }
+        [RelayCommand]
+        private void SelectWindow()
+        {
+            var dialog = new WindowSelectDialog(m_windowEnumerator);
+
+            // 设置 Owner 为主窗口，使对话框居中显示
+            var mainWindow = Application.Current.MainWindow;
+            if (mainWindow != null)
+            {
+                dialog.Owner = mainWindow;
+            }
+
+            if (dialog.ShowDialog() == true && dialog.SelectedWindow != null)
+            {
+                ApplySelectedWindow(dialog.SelectedWindow.Handle, dialog.SelectedWindow.Title, dialog.SelectedWindow.ProcessName);
+                Log.InfoScreen("[UI] 选择窗口: {Process} ({Handle})", dialog.SelectedWindow.ProcessName, dialog.SelectedWindow.HandleText);
+            }
+        }
+
+        /// <summary>由宿主或自动查找逻辑调用，将指定窗口设为当前选择（不启动捕获）。</summary>
+        public void SetSelectedWindow(nint hWnd, string title, string processName)
+        {
+            ApplySelectedWindow(hWnd, title, processName);
+        }
+
+        private void ApplySelectedWindow(nint hWnd, string title, string processName)
+        {
+            m_hWnd = hWnd;
+            m_windowTitle = title;
+            WindowDisplayText = string.IsNullOrEmpty(title) ? processName : title;
+            StartCapture();
+        }
+
+        [RelayCommand]
+        private void ToggleCapture()
+        {
+            if (IsCapturing)
+            {
+                StopCapture();
+            }
+            else
+            {
+                if (m_hWnd == nint.Zero)
+                {
+                    var args = new StartRequestedWhenNoWindowEventArgs(ApplySelectedWindow);
+                    StartRequestedWhenNoWindow?.Invoke(this, args);
+                    if (m_hWnd == nint.Zero)
+                    {
+                        return;
+                    }
+                }
+                StartCapture();
+            }
+        }
+
+        /// <summary>开始捕获（宿主在异步设置窗口后可调用以自动开始）。</summary>
+        public void StartCapture()
+        {
+            if (m_hWnd == nint.Zero)
+            {
+                StatusMessage = "请先选择窗口";
+                return;
+            }
+
+            try
+            {
+                m_context.Initialize(m_hWnd, useGpuHdrConversion: UseGpuHdrConversion);
+
+                IsCapturing = true;
+                IsIdle = false;
+                CaptureButtonText = "停止";
+                Log.InfoScreen("[UI] 开始捕获 (GPU HDR: {UseGpu})", UseGpuHdrConversion ? "开启" : "关闭");
+
+                // 启动 Overlay 窗口
+                m_overlay.AttachTo(m_hWnd);
+
+                m_previewController.StartRendering();
+                SyncPreviewFromController();
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"启动失败: {ex.Message}";
+                Log.ErrorScreen(ex, "[UI] 启动捕获失败");
+            }
+        }
+
+        private void StopCapture()
+        {
+            m_previewController.StopRendering();
+            m_context.Capture?.Stop();
+
+            // 关闭 Overlay
+            m_overlay.Detach();
+
+            IsCapturing = false;
+            IsIdle = true;
+            CaptureButtonText = "启动";
+            StatusText = "";
+            StatusMessage = "已停止";
+            PreviewSource = null;
+            PreviewFps = "-";
+            PreviewResolution = "-";
+            Log.InfoScreen("[UI] 停止捕获");
+        }
+
+#endregion
     }
 }

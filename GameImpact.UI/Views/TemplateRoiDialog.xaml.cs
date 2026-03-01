@@ -9,21 +9,25 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using GameImpact.Utilities.Images;
+using GameImpact.Utilities.Logging;
 using OpenCvSharp;
+using Point = System.Windows.Point;
+using Rect = System.Windows.Rect;
+using Window = System.Windows.Window;
 
 #endregion
 
 namespace GameImpact.UI.Views
 {
     /// <summary>模板ROI设置对话框，支持可视化框选匹配区域和文字区域</summary>
-    public partial class TemplateRoiDialog : System.Windows.Window
+    public partial class TemplateRoiDialog : Window
     {
-        private System.Windows.Point m_startPoint;
+        private readonly string m_templatePath;
         private bool m_isSelecting;
         private bool m_isSelectingMatchRoi = true; // true=匹配区域, false=文字区域
-        private System.Windows.Rect? m_matchRoi;
-        private System.Windows.Rect? m_textRoi;
-        private readonly string m_templatePath;
+        private Rect? m_matchRoi;
+        private Point m_startPoint;
+        private Rect? m_textRoi;
 
         /// <summary>构造函数</summary>
         /// <param name="templatePath">模板图片路径</param>
@@ -33,26 +37,18 @@ namespace GameImpact.UI.Views
         {
             InitializeComponent();
             m_templatePath = templatePath;
-            m_matchRoi = matchRoi.HasValue 
-                ? new System.Windows.Rect(matchRoi.Value.X, matchRoi.Value.Y, matchRoi.Value.Width, matchRoi.Value.Height)
-                : null;
-            m_textRoi = textRoi.HasValue
-                ? new System.Windows.Rect(textRoi.Value.X, textRoi.Value.Y, textRoi.Value.Width, textRoi.Value.Height)
-                : null;
+            m_matchRoi = matchRoi.HasValue ? new Rect(matchRoi.Value.X, matchRoi.Value.Y, matchRoi.Value.Width, matchRoi.Value.Height) : null;
+            m_textRoi = textRoi.HasValue ? new Rect(textRoi.Value.X, textRoi.Value.Y, textRoi.Value.Width, textRoi.Value.Height) : null;
 
             LoadTemplateImage();
             UpdateRoiDisplay();
         }
 
         /// <summary>匹配区域ROI（相对于模板图片）</summary>
-        public OpenCvSharp.Rect? MatchRoi => m_matchRoi.HasValue 
-            ? new OpenCvSharp.Rect((int)m_matchRoi.Value.X, (int)m_matchRoi.Value.Y, (int)m_matchRoi.Value.Width, (int)m_matchRoi.Value.Height)
-            : null;
+        public OpenCvSharp.Rect? MatchRoi => m_matchRoi.HasValue ? new OpenCvSharp.Rect((int)m_matchRoi.Value.X, (int)m_matchRoi.Value.Y, (int)m_matchRoi.Value.Width, (int)m_matchRoi.Value.Height) : null;
 
         /// <summary>文字区域ROI（相对于模板图片）</summary>
-        public OpenCvSharp.Rect? TextRoi => m_textRoi.HasValue
-            ? new OpenCvSharp.Rect((int)m_textRoi.Value.X, (int)m_textRoi.Value.Y, (int)m_textRoi.Value.Width, (int)m_textRoi.Value.Height)
-            : null;
+        public OpenCvSharp.Rect? TextRoi => m_textRoi.HasValue ? new OpenCvSharp.Rect((int)m_textRoi.Value.X, (int)m_textRoi.Value.Y, (int)m_textRoi.Value.Width, (int)m_textRoi.Value.Height) : null;
 
         /// <summary>标题栏鼠标左键按下事件处理</summary>
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -88,7 +84,7 @@ namespace GameImpact.UI.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[TemplateRoiDialog] 加载图片失败: {ex.Message}");
+                Log.Debug($"[TemplateRoiDialog] 加载图片失败: {ex.Message}");
             }
         }
 
@@ -126,12 +122,12 @@ namespace GameImpact.UI.Views
                 Marshal.Copy(rgba.Data, data, 0, data.Length);
 
                 var bitmap = BitmapSource.Create(
-                    width, height,
-                    96, 96,
-                    PixelFormats.Bgra32,
-                    null,
-                    data,
-                    (int)stride);
+                        width, height,
+                        96, 96,
+                        PixelFormats.Bgra32,
+                        null,
+                        data,
+                        (int)stride);
 
                 bitmap.Freeze();
                 return bitmap;
@@ -150,10 +146,10 @@ namespace GameImpact.UI.Views
         {
             // 检查点击的是哪个区域
             var pos = e.GetPosition(ImageCanvas);
-            
+
             // 如果按住Ctrl键，选择文字区域；否则选择匹配区域
             m_isSelectingMatchRoi = !Keyboard.IsKeyDown(Key.LeftCtrl) && !Keyboard.IsKeyDown(Key.RightCtrl);
-            
+
             m_startPoint = pos;
             m_isSelecting = true;
             ImageCanvas.CaptureMouse();
@@ -201,7 +197,7 @@ namespace GameImpact.UI.Views
         }
 
         /// <summary>更新选择矩形显示</summary>
-        private void UpdateSelectionRect(System.Windows.Point start, System.Windows.Point end)
+        private void UpdateSelectionRect(Point start, Point end)
         {
             var rect = CreateRect(start, end);
             var roiRect = m_isSelectingMatchRoi ? MatchRoiRect : TextRoiRect;
@@ -214,7 +210,7 @@ namespace GameImpact.UI.Views
         }
 
         /// <summary>创建矩形（确保左上角在左上方）</summary>
-        private System.Windows.Rect CreateRect(System.Windows.Point p1, System.Windows.Point p2)
+        private Rect CreateRect(Point p1, Point p2)
         {
             var x = Math.Min(p1.X, p2.X);
             var y = Math.Min(p1.Y, p2.Y);
@@ -227,7 +223,7 @@ namespace GameImpact.UI.Views
             width = Math.Min(width, ImageCanvas.Width - x);
             height = Math.Min(height, ImageCanvas.Height - y);
 
-            return new System.Windows.Rect(x, y, width, height);
+            return new Rect(x, y, width, height);
         }
 
         /// <summary>更新ROI显示</summary>

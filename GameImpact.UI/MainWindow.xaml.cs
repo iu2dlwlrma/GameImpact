@@ -3,6 +3,7 @@
 using System;
 using System.Windows;
 using System.Windows.Input;
+using GameImpact.UI.Models;
 using GameImpact.UI.Services;
 using GameImpact.UI.Settings;
 using GameImpact.UI.Views;
@@ -67,7 +68,10 @@ namespace GameImpact.UI
 
         private void OnStateChanged(object? sender, EventArgs e)
         {
-            MaximizeIcon.Text = WindowState == WindowState.Maximized ? "❐" : "□";
+            if (MaximizeIcon != null)
+            {
+                MaximizeIcon.Text = WindowState == WindowState.Maximized ? "🔳" : "🔲";
+            }
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -105,6 +109,7 @@ namespace GameImpact.UI
             ThemeService.Instance.ToggleTheme();
         }
 
+        /// <summary>打开调试面板</summary>
         private void DebugPanel_Click(object sender, RoutedEventArgs e)
         {
             // 如果调试窗口已存在且未关闭，则激活它
@@ -123,13 +128,8 @@ namespace GameImpact.UI
             m_debugWindow.Show();
         }
 
+        /// <summary>打开设置窗口</summary>
         private void Settings_Click(object sender, RoutedEventArgs e)
-        {
-            ShowSettings();
-        }
-
-        /// <summary>打开设置窗口（供宿主在需要引导用户设置时调用，如未配置游戏路径）。</summary>
-        public void ShowSettings()
         {
             if (m_settingsWindow is { IsLoaded: true })
             {
