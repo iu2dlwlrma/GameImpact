@@ -29,8 +29,12 @@ namespace GameImpact.UI.Settings
         [SettingsItem("自动开始捕获", Description = "选择窗口后自动开始画面捕获", Order = 1)]
         public bool AutoStartCapture{ get; set; } = false;
 
-        /// <summary>捕获帧率限制（0 表示不限制）</summary>
+        /// <summary>游戏根目录（与子类提供的 GameStartPath 拼接后作为启动路径，未设置时点击启动会提示配置）</summary>
         [SettingsGroup("窗口与捕获", Order = 0)]
+        [SettingsItem("游戏路径", Description = "游戏根目录", Order = 0)]
+        public string GameRootPath{ get; set; } = string.Empty;
+
+        /// <summary>捕获帧率限制（0 表示不限制）</summary>
         [SettingsItem("捕获帧率限制", Description = "设为 0 表示不限制帧率", Order = 3, Min = 0, Max = 240)]
         public int CaptureFrameRateLimit{ get; set; } = 0;
 

@@ -20,11 +20,13 @@ namespace GameImpact.UI
 
         /// <summary>构造函数</summary>
         /// <param name="model">主视图模型</param>
-        public MainWindow(MainModel model)
+        /// <param name="statusTips">右下角 Tips 服务，用于显示状态提示</param>
+        public MainWindow(MainModel model, IStatusTipsService statusTips)
         {
             InitializeComponent();
             m_model = model;
             DataContext = model;
+            TipsOverlay.DataContext = statusTips;
 
             ThemeService.Instance.ThemeChanged += OnThemeChanged;
             UpdateThemeIcon();
@@ -123,7 +125,12 @@ namespace GameImpact.UI
 
         private void Settings_Click(object sender, RoutedEventArgs e)
         {
-            // 如果设置窗口已存在且未关闭，则激活它
+            ShowSettings();
+        }
+
+        /// <summary>打开设置窗口（供宿主在需要引导用户设置时调用，如未配置游戏路径）。</summary>
+        public void ShowSettings()
+        {
             if (m_settingsWindow is { IsLoaded: true })
             {
                 m_settingsWindow.Activate();

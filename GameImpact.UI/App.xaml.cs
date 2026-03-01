@@ -2,10 +2,17 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Text;
 using System.Windows;
 using GameImpact.Core;
+using GameImpact.Core.Windowing;
 using GameImpact.UI.Services;
+using GameImpact.UI.Views;
 using GameImpact.UI.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -21,9 +28,12 @@ namespace GameImpact.UI
     public abstract class GameImpactApp : Application
     {
         private IHost? m_host;
+        private bool m_isStartingGame;
 
         /// <summary>应用显示名称，用于窗口标题和日志前缀。子类覆写此属性自定义名称。</summary>
         public virtual string AppName => "GameImpact";
+
+        public virtual string GameName => "GameImpact";
 
         /// <summary>DI 容器</summary>
         public IHost Host => m_host ?? throw new InvalidOperationException("Host 尚未初始化");
@@ -88,8 +98,9 @@ namespace GameImpact.UI
                     {
                         // 注册核心服务
                         services.AddGameImpact();
-                        // UI 层：Overlay 由 UI 提供，供 MainModel 注入
+                        // UI 层：Overlay 与右下角 Tips 由 UI 提供
                         services.AddSingleton<IOverlayUiService>(_ => OverlayUiService.Instance);
+                        services.AddSingleton<IStatusTipsService, StatusTipsService>();
                         // 注册应用设置服务
                         services.AddSingleton<ISettingsProvider<AppSettings>>(
                                 new JsonSettingsProvider<AppSettings>("appsettings.json"));
@@ -153,6 +164,7 @@ namespace GameImpact.UI
             };
 
             mainWindow.Show();
+            OnMainWindowShown(mainWindow);
 
             AppLog.Info("{AppName} started", AppName);
         }
@@ -170,5 +182,198 @@ namespace GameImpact.UI
             await Log.CloseAndFlushAsync();
             base.OnExit(e);
         }
+
+#region MainWindow
+
+        /// <summary>主窗口显示后调用。父类实现：启动时按游戏路径自动查找窗口；订阅「启动且未选窗口」时弹路径设置、启动游戏并查找窗口。子类覆写时请调用 base.OnMainWindowShown(mainWindow)。</summary>
+        protected virtual void OnMainWindowShown(Window mainWindow)
+        {
+            if (mainWindow is not MainWindow shell || shell.DataContext is not MainModel model)
+            {
+                return;
+            }
+
+            var enumerator = Host.Services.GetRequiredService<IWindowEnumerator>();
+            var appSettingsProvider = Host.Services.GetRequiredService<ISettingsProvider<AppSettings>>();
+
+            if (!string.IsNullOrWhiteSpace(AppName) || !string.IsNullOrWhiteSpace(GameName))
+            {
+                if (model.SetProcess(enumerator, AppName, GameName))
+                {
+                    return;
+                }
+            }
+
+            // 点击「启动」且未选窗口时：未设置路径则弹窗设置，否则启动游戏并查找窗口
+            model.StartRequestedWhenNoWindow += (_, args) =>
+            {
+                // 防止快速点击启动多个进程
+                if (m_isStartingGame)
+                {
+                    model.StatusMessage = "游戏正在启动中，请稍候...";
+                    return;
+                }
+
+                var gamePath = GetGamePath();
+                if (string.IsNullOrWhiteSpace(gamePath))
+                {
+                    var pathDialog = new GamePathSetupDialog(appSettingsProvider, shell);
+                    if (pathDialog.ShowDialog() != true)
+                    {
+                        model.StatusMessage = "请设置游戏路径后再启动";
+                        return;
+                    }
+                    gamePath = GetGamePath();
+                }
+
+                if (string.IsNullOrWhiteSpace(gamePath))
+                {
+                    return;
+                }
+
+                try
+                {
+                    m_isStartingGame = true;
+                    model.StatusMessage = "正在启动游戏...";
+
+                    var startInfo = new ProcessStartInfo
+                    {
+                            FileName = gamePath,
+                            UseShellExecute = true,
+                            WorkingDirectory = Path.GetDirectoryName(gamePath) ?? ""
+                    };
+                    var process = Process.Start(startInfo);
+                    if (process == null)
+                    {
+                        m_isStartingGame = false;
+                        model.StatusMessage = "启动游戏失败：无法创建进程";
+                        return;
+                    }
+
+                    // 在后台任务中等待应用真正启动并获取窗口信息
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await Task.Yield();
+
+                            // 等待进程真正启动，获取到有效的窗口句柄
+                            const int maxWaitTime = 30000; // 30秒超时
+                            const int checkInterval = 1000; // 每1s检查一次
+                            nint hWnd = nint.Zero;
+                            string title = "";
+                            string processName = "";
+                            var elapsed = 0;
+
+                            while (elapsed < maxWaitTime)
+                            {
+                                try
+                                {
+                                    // 刷新进程信息
+                                    process.Refresh();
+                                    hWnd = process.MainWindowHandle;
+                                    processName = process.ProcessName ?? "";
+                                    title = process.MainWindowTitle ?? "";
+                                    AppLog.Info("Refresh Process [Title:{Title}] - [GameName:{GameName}]...", title, GameName);
+
+                                    // 如果获取到有效的窗口句柄
+                                    if (hWnd != nint.Zero && !string.IsNullOrWhiteSpace(title))
+                                    {
+                                        // 如果标题只是进程名，说明还没有真正的应用标题，继续等待
+                                        var isProcessName = string.Equals(title, processName, StringComparison.OrdinalIgnoreCase) ||
+                                                string.Equals(title, processName + ".exe", StringComparison.OrdinalIgnoreCase);
+                                        if (!isProcessName)
+                                        {
+                                            // 如果指定了 GameName，必须等待标题包含 GameName 才认为匹配成功
+                                            if (!string.IsNullOrWhiteSpace(GameName))
+                                            {
+                                                if (title.Contains(GameName, StringComparison.Ordinal))
+                                                {
+                                                    break;
+                                                }
+                                            }
+                                            else
+                                            {
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                catch
+                                {
+                                    // 进程可能已退出
+                                    if (process.HasExited)
+                                    {
+                                        break;
+                                    }
+                                }
+
+                                await Task.Delay(checkInterval);
+                                elapsed += checkInterval;
+                            }
+
+                            // 如果进程已退出，说明启动失败
+                            if (process.HasExited)
+                            {
+                                Current.Dispatcher.InvokeAsync(() =>
+                                {
+                                    m_isStartingGame = false;
+                                    model.StatusMessage = "游戏进程已退出";
+                                });
+                                return;
+                            }
+
+                            // 如果超时仍未获取到窗口句柄
+                            if (hWnd == nint.Zero)
+                            {
+                                Current.Dispatcher.InvokeAsync(() =>
+                                {
+                                    m_isStartingGame = false;
+                                    model.StatusMessage = "启动超时：无法获取游戏窗口";
+                                });
+                                return;
+                            }
+
+                            // 设置窗口信息
+                            Current.Dispatcher.InvokeAsync(() =>
+                            {
+                                m_isStartingGame = false;
+                                args.SetWindow(hWnd, title, processName);
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Current.Dispatcher.InvokeAsync(() =>
+                            {
+                                m_isStartingGame = false;
+                                model.StatusMessage = $"等待游戏启动时出错: {ex.Message}";
+                            });
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    m_isStartingGame = false;
+                    model.StatusMessage = $"启动游戏失败: {ex.Message}";
+                }
+            };
+        }
+
+        /// <summary>从 AppSettings.GameRootPath 与子类 GetGameExecutFilePath 拼接得到完整游戏路径。</summary>
+        protected string? GetGamePath()
+        {
+            var root = Host.Services.GetRequiredService<ISettingsProvider<AppSettings>>().Load().GameRootPath;
+            var start = GetGameExecutFilePath();
+            if (string.IsNullOrWhiteSpace(root) || string.IsNullOrWhiteSpace(start))
+            {
+                return null;
+            }
+            return Path.Combine(root, start);
+        }
+
+        /// <summary>子类覆写以提供相对于游戏根目录的启动路径</summary>
+        protected virtual string? GetGameExecutFilePath() => null;
+
+#endregion
     }
 }

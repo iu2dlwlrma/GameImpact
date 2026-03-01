@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -12,6 +13,7 @@ using GameImpact.Abstractions.Input;
 using GameImpact.Core;
 using GameImpact.Core.Services;
 using GameImpact.Core.Windowing;
+using GameImpact.UI.Events;
 using GameImpact.UI.Services;
 using GameImpact.UI.Views;
 using GameImpact.Utilities.Logging;
@@ -31,6 +33,7 @@ namespace GameImpact.UI
         private readonly DispatcherTimer m_logTimer;
         private readonly IOverlayUiService m_overlay;
         private readonly CapturePreviewController m_previewController;
+        private readonly IStatusTipsService m_statusTips;
         private readonly ITemplateMatchService m_templateMatch;
         private readonly ITemplateService m_templates;
         private readonly IWindowEnumerator m_windowEnumerator;
@@ -55,6 +58,9 @@ namespace GameImpact.UI
         private nint m_hWnd;
         private string m_windowTitle = "";
 
+        /// <summary>点击「启动」但当前未选择窗口时触发，宿主可尝试自动查找/启动游戏并调用 args.SetWindow 后继续启动。</summary>
+        public event EventHandler<StartRequestedWhenNoWindowEventArgs>? StartRequestedWhenNoWindow;
+
         /// <summary>构造函数</summary>
         public MainModel(GameContext context,
                 IWindowEnumerator windowEnumerator,
@@ -62,7 +68,8 @@ namespace GameImpact.UI
                 ITemplateMatchService templateMatch,
                 IDebugActionsService debugActions,
                 ICapturePreviewProvider previewProvider,
-                IOverlayUiService overlay)
+                IOverlayUiService overlay,
+                IStatusTipsService statusTips)
         {
             m_context = context;
             m_windowEnumerator = windowEnumerator;
@@ -70,6 +77,7 @@ namespace GameImpact.UI
             m_templateMatch = templateMatch;
             m_debugActions = debugActions;
             m_overlay = overlay;
+            m_statusTips = statusTips;
             m_previewController = new CapturePreviewController(previewProvider);
             m_previewController.PreviewUpdated += SyncPreviewFromController;
 
@@ -77,6 +85,16 @@ namespace GameImpact.UI
             m_logTimer.Tick += OnLogTick;
             Log.OnScreenLogMessage += OnScreenLogReceived;
             m_logTimer.Start();
+        }
+
+        partial void OnStatusMessageChanged(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+            m_statusTips.Push(value);
+            Log.Debug("[状态] {Message}", value);
         }
 
         /// <summary>模板文件夹路径（供 Debug 等 UI 使用）。</summary>
@@ -144,6 +162,26 @@ namespace GameImpact.UI
             StatusText = m_previewController.StatusText;
         }
 
+
+#region 窗口相关
+
+        public bool SetProcess(IWindowEnumerator enumerator, string processName, string processTitle)
+        {
+            try
+            {
+                var win = WindowFinder.FindByProcessNameAndProcessTitle(enumerator, processName, processTitle);
+                if (win != null)
+                {
+                    SetSelectedWindow(win.Handle, win.Title, win.ProcessName);
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("[{AppName} - {AppTitle}] 自动查找进程: {Ex}", processName, processTitle, ex.Message);
+            }
+            return false;
+        }
         [RelayCommand]
         private void SelectWindow()
         {
@@ -158,13 +196,23 @@ namespace GameImpact.UI
 
             if (dialog.ShowDialog() == true && dialog.SelectedWindow != null)
             {
-                var window = dialog.SelectedWindow;
-                m_hWnd = window.Handle;
-                m_windowTitle = window.Title;
-                WindowDisplayText = $"{window.ProcessName}";
-                StatusMessage = $"已选择: {window.ProcessName}";
-                Log.InfoScreen("[UI] 选择窗口: {Process} ({Handle})", window.ProcessName, window.HandleText);
+                ApplySelectedWindow(dialog.SelectedWindow.Handle, dialog.SelectedWindow.Title, dialog.SelectedWindow.ProcessName);
+                Log.InfoScreen("[UI] 选择窗口: {Process} ({Handle})", dialog.SelectedWindow.ProcessName, dialog.SelectedWindow.HandleText);
             }
+        }
+
+        /// <summary>由宿主或自动查找逻辑调用，将指定窗口设为当前选择（不启动捕获）。</summary>
+        public void SetSelectedWindow(nint hWnd, string title, string processName)
+        {
+            ApplySelectedWindow(hWnd, title, processName);
+        }
+
+        private void ApplySelectedWindow(nint hWnd, string title, string processName)
+        {
+            m_hWnd = hWnd;
+            m_windowTitle = title;
+            WindowDisplayText = string.IsNullOrEmpty(title) ? processName : title;
+            StartCapture();
         }
 
         [RelayCommand]
@@ -176,11 +224,21 @@ namespace GameImpact.UI
             }
             else
             {
+                if (m_hWnd == nint.Zero)
+                {
+                    var args = new StartRequestedWhenNoWindowEventArgs(ApplySelectedWindow);
+                    StartRequestedWhenNoWindow?.Invoke(this, args);
+                    if (m_hWnd == nint.Zero)
+                    {
+                        return;
+                    }
+                }
                 StartCapture();
             }
         }
 
-        private void StartCapture()
+        /// <summary>开始捕获（宿主在异步设置窗口后可调用以自动开始）。</summary>
+        public void StartCapture()
         {
             if (m_hWnd == nint.Zero)
             {
@@ -195,7 +253,6 @@ namespace GameImpact.UI
                 IsCapturing = true;
                 IsIdle = false;
                 CaptureButtonText = "停止";
-                StatusMessage = "捕获中";
                 Log.InfoScreen("[UI] 开始捕获 (GPU HDR: {UseGpu})", UseGpuHdrConversion ? "开启" : "关闭");
 
                 // 启动 Overlay 窗口
@@ -229,6 +286,8 @@ namespace GameImpact.UI
             PreviewResolution = "-";
             Log.InfoScreen("[UI] 停止捕获");
         }
+
+#endregion
 
         public void ClearLog()
         {
